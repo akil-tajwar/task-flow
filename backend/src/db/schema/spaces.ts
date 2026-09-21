@@ -54,6 +54,7 @@ export const spacePages = pgTable(
 export const spacePageTags = pgTable(
   "space_page_tags",
   {
+    id: uuid("id").primaryKey().defaultRandom(),
     pageId: uuid("page_id")
       .notNull()
       .references(() => spacePages.id, { onDelete: "cascade" }),

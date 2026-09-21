@@ -26,6 +26,7 @@ export const skills = pgTable(
 export const userSkills = pgTable(
   "user_skills",
   {
+    id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),

@@ -6,7 +6,6 @@ import {
   boolean,
   timestamp,
   jsonb,
-  integer,
   index,
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";

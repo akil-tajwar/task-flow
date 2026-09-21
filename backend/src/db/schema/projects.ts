@@ -10,7 +10,6 @@ import {
   date,
   integer,
   pgEnum,
-  unique,
   primaryKey,
   index,
   AnyPgColumn,
@@ -90,6 +89,7 @@ export const projects = pgTable(
 export const projectMembers = pgTable(
   "project_members",
   {
+    id: uuid("id").primaryKey().defaultRandom(),
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),

@@ -37,6 +37,7 @@ export const chatChannels = pgTable(
 export const chatChannelMembers = pgTable(
   "chat_channel_members",
   {
+    id: uuid("id").primaryKey().defaultRandom(),
     channelId: uuid("channel_id")
       .notNull()
       .references(() => chatChannels.id, { onDelete: "cascade" }),
