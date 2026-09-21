@@ -8,10 +8,10 @@ import {
   pgEnum,
   index,
 } from "drizzle-orm/pg-core";
-import { tenants } from "./tenants";
-import { users } from "./users";
-import { projects } from "./projects";
-import { tasks } from "./tasks";
+import { tenants } from "./tenants.schema";
+import { users } from "./users.schema";
+import { projects } from "./projects.schema";
+import { tasks } from "./tasks.schema";
 
 export const proofStatusEnum = pgEnum("proof_status", [
   "pending",

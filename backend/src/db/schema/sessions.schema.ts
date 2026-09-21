@@ -6,7 +6,7 @@ import {
   timestamp,
   index,
 } from "drizzle-orm/pg-core";
-import { users } from "./users";
+import { users } from "./users.schema";
 
 export const sessions = pgTable(
   "sessions",

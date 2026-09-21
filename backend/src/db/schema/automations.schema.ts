@@ -9,8 +9,8 @@ import {
   jsonb,
   index,
 } from "drizzle-orm/pg-core";
-import { tenants } from "./tenants";
-import { users } from "./users";
+import { tenants } from "./tenants.schema";
+import { users } from "./users.schema";
 
 export const automations = pgTable(
   "automations",

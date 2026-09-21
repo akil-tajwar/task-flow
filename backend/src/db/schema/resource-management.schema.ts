@@ -10,11 +10,11 @@ import {
   integer,
   index,
 } from "drizzle-orm/pg-core";
-import { tenants } from "./tenants";
-import { users } from "./users";
-import { projects } from "./projects";
-import { roles } from "./roles";
-import { skills } from "./skills";
+import { tenants } from "./tenants.schema";
+import { users } from "./users.schema";
+import { projects } from "./projects.schema";
+import { roles } from "./roles.schema";
+import { skills } from "./skills.schema";
 
 export const resourceAllocations = pgTable(
   "resource_allocations",

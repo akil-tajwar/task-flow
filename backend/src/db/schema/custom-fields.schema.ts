@@ -9,7 +9,7 @@ import {
   jsonb,
   index,
 } from "drizzle-orm/pg-core";
-import { tenants } from "./tenants";
+import { tenants } from "./tenants.schema";
 
 export const customFieldDefinitions = pgTable(
   "custom_field_definitions",

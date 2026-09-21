@@ -1,27 +1,27 @@
 import { relations } from "drizzle-orm";
-import { tenants } from "./tenants";
-import { users } from "./users";
-import { roles, userRoles } from "./roles";
-import { clients, clientContacts } from "./clients";
-import { projects, projectMembers, milestones, taskLists } from "./projects";
-import { tasks, taskDependencies, comments } from "./tasks";
-import { timeEntries, calendarEvents } from "./time-tracking";
+import { tenants } from "./tenants.schema";
+import { users } from "./users.schema";
+import { roles, userRoles } from "./roles.schema";
+import { clients } from "./clients.schema";
+import { projects, projectMembers, milestones, taskLists } from "./projects.schema";
+import { tasks, taskDependencies, comments } from "./tasks.schema";
+import { timeEntries, calendarEvents } from "./time-tracking.schema";
 import {
   invoices,
   invoiceLineItems,
   expenses,
   budgets,
   retainers,
-} from "./finance";
-import { tickets, ticketMessages, deskInboxes } from "./desk";
-import { chatChannels, chatMessages, chatChannelMembers } from "./chat";
-import { spacePages, spaces } from "./spaces";
-import { quotes, quoteLineItems } from "./quotes";
-import { proofs, proofFeedback } from "./proofs";
-import { automations, automationRuns } from "./automations";
-import { sessions } from "./sessions";
-import { notifications } from "./notifications";
-import { skills, userSkills } from "./skills";
+} from "./finance.schema";
+import { tickets, ticketMessages, deskInboxes } from "./desk.schema";
+import { chatChannels, chatMessages, chatChannelMembers } from "./chat.schema";
+import { spacePages, spaces } from "./spaces.schema";
+import { quotes, quoteLineItems } from "./quotes.schema";
+import { proofs, proofFeedback } from "./proofs.schema";
+import { automations, automationRuns } from "./automations.schema";
+import { sessions } from "./sessions.schema";
+import { notifications } from "./notifications.schema";
+import { skills, userSkills } from "./skills.schema";
 
 export const tenantsRelations = relations(tenants, ({ many }) => ({
   users: many(users),
@@ -65,18 +65,9 @@ export const clientsRelations = relations(clients, ({ one, many }) => ({
     fields: [clients.tenantId],
     references: [tenants.id],
   }),
-  contacts: many(clientContacts),
   projects: many(projects),
   invoices: many(invoices),
   tickets: many(tickets),
-}));
-
-export const clientContactsRelations = relations(clientContacts, ({ one }) => ({
-  client: one(clients, {
-    fields: [clientContacts.clientId],
-    references: [clients.id],
-  }),
-  user: one(users, { fields: [clientContacts.userId], references: [users.id] }),
 }));
 
 export const projectsRelations = relations(projects, ({ one, many }) => ({

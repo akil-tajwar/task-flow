@@ -10,9 +10,9 @@ import {
   unique,
   index,
 } from "drizzle-orm/pg-core";
-import { tenants } from "./tenants";
-import { clients } from "./clients";
-import { projects } from "./projects";
+import { tenants } from "./tenants.schema";
+import { clients } from "./clients.schema";
+import { projects } from "./projects.schema";
 
 export const quoteStatusEnum = pgEnum("quote_status", [
   "draft",

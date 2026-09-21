@@ -14,9 +14,9 @@ import {
   index,
   AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import { tenants } from "./tenants";
-import { users } from "./users";
-import { projects, taskLists, milestones } from "./projects";
+import { tenants } from "./tenants.schema";
+import { users } from "./users.schema";
+import { projects, taskLists, milestones } from "./projects.schema";
 
 export const taskStatusEnum = pgEnum("task_status", [
   "todo",

@@ -6,12 +6,12 @@ import {
   timestamp,
   pgEnum,
 } from "drizzle-orm/pg-core";
-import { tenants } from "./tenants";
+import { tenants } from "./tenants.schema";
 
 export const userRoleEnum = pgEnum("user_role", [
-  "super_admin",
   "admin",
   "user",
+  "client",
 ]);
 
 export const users = pgTable("users", {
@@ -22,7 +22,7 @@ export const users = pgTable("users", {
   name: varchar("name", { length: 255 }).notNull(),
   email: varchar("email", { length: 255 }).notNull().unique(),
   passwordHash: text("password_hash").notNull(),
-  role: userRoleEnum("role").notNull().default("user"),
+  role: userRoleEnum("role").notNull().default("admin"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

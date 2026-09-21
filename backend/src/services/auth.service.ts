@@ -1,7 +1,7 @@
 ﻿import bcrypt from "bcryptjs";
 import { eq, desc } from "drizzle-orm";
 import { db } from "../db/index";
-import { users, tenants, activityLogs } from "../db/schema/index";
+import { users, tenants, activityLogs } from "../db/schema/index.schema";
 import {
   signAccessToken,
   signRefreshToken,
@@ -63,37 +63,72 @@ export const authService = {
   },
 
   async login(input: LoginInput, meta?: RequestMeta) {
-    const user = await db.query.users.findFirst({
-      where: eq(users.email, input.email),
-    });
-    if (!user || !(await bcrypt.compare(input.password, user.passwordHash))) {
-      throw new Error("Invalid credentials");
-    }
+    try {
+      console.log("1. Finding user:", input.email);
 
-    const payload = { sub: user.id, tenantId: user.tenantId!, role: user.role };
-    const refreshToken = signRefreshToken(payload);
+      const user = await db.query.users.findFirst({
+        where: eq(users.email, input.email),
+      });
 
-    await Promise.all([
-      redis.set(`refresh:${user.id}`, refreshToken, { EX: REFRESH_TTL }),
-      db.insert(activityLogs).values({
+      console.log("2. User:", user);
+
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      console.log("3. Comparing password");
+
+      const passwordValid = await bcrypt.compare(
+        input.password,
+        user.passwordHash,
+      );
+
+      console.log("4. Password valid:", passwordValid);
+
+      if (!passwordValid) {
+        throw new Error("Invalid credentials");
+      }
+
+      const payload = {
+        sub: user.id,
+        tenantId: user.tenantId!,
+        role: user.role,
+      };
+
+      console.log("5. Payload:", payload);
+
+      const refreshToken = signRefreshToken(payload);
+
+      console.log("6. Refresh token created");
+
+      await redis.set(`refresh:${user.id}`, refreshToken, { EX: REFRESH_TTL });
+
+      console.log("7. Redis success");
+
+      await db.insert(activityLogs).values({
         tenantId: user.tenantId,
         userId: user.id,
         action: "login",
         ipAddress: meta?.ip ?? null,
         userAgent: meta?.ua ?? null,
-      }),
-    ]);
+      });
 
-    return {
-      accessToken: signAccessToken(payload),
-      refreshToken,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
-    };
+      console.log("8. Activity log success");
+
+      return {
+        accessToken: signAccessToken(payload),
+        refreshToken,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        },
+      };
+    } catch (error) {
+      console.error("LOGIN ERROR:", error);
+      throw error;
+    }
   },
 
   async refresh(token: string) {

@@ -12,12 +12,12 @@ import {
   unique,
   index,
 } from "drizzle-orm/pg-core";
-import { tenants } from "./tenants";
-import { users } from "./users";
-import { clients } from "./clients";
-import { projects } from "./projects";
-import { tasks } from "./tasks";
-import { timeEntries } from "./time-tracking";
+import { tenants } from "./tenants.schema";
+import { users } from "./users.schema";
+import { clients } from "./clients.schema";
+import { projects } from "./projects.schema";
+import { tasks } from "./tasks.schema";
+import { timeEntries } from "./time-tracking.schema";
 
 export const invoiceStatusEnum = pgEnum("invoice_status", [
   "draft",

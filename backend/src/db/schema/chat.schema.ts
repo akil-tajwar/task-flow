@@ -8,9 +8,9 @@ import {
   jsonb,
   index,
 } from "drizzle-orm/pg-core";
-import { tenants } from "./tenants";
-import { users } from "./users";
-import { projects } from "./projects";
+import { tenants } from "./tenants.schema";
+import { users } from "./users.schema";
+import { projects } from "./projects.schema";
 
 export const chatChannels = pgTable(
   "chat_channels",

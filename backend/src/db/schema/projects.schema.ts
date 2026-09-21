@@ -14,9 +14,9 @@ import {
   index,
   AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import { tenants } from "./tenants";
-import { users } from "./users";
-import { clients } from "./clients";
+import { tenants } from "./tenants.schema";
+import { users } from "./users.schema";
+import { clients } from "./clients.schema";
 
 export const projectStatusEnum = pgEnum("project_status", [
   "active",
