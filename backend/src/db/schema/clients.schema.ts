@@ -5,7 +5,6 @@ import {
   text,
   boolean,
   timestamp,
-  jsonb,
   index,
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants.schema";
@@ -26,13 +25,11 @@ export const clients = pgTable(
     website: varchar("website", { length: 255 }),
     email: varchar("email", { length: 255 }).notNull(),
     phone: varchar("phone", { length: 50 }),
-    address: jsonb("address").$type<{
-      street?: string;
-      city?: string;
-      state?: string;
-      country?: string;
-      postalCode?: string;
-    }>(),
+    street: varchar("street", { length: 255 }),
+    city: varchar("city", { length: 100 }),
+    state: varchar("state", { length: 100 }),
+    country: varchar("country", { length: 100 }),
+    postalCode: varchar("postal_code", { length: 20 }),
     notes: text("notes"),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at").notNull().defaultNow(),

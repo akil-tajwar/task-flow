@@ -11,14 +11,14 @@ import {
   updateProjectHandler,
 } from "../controllers/projects.controller";
 
-export const projects = new Hono();
+export const projectsRoutes = new Hono();
 
-projects.use("*", authMiddleware, tenantMiddleware);
+projectsRoutes.use("*", authMiddleware, tenantMiddleware);
 
-projects.post("/create", createProjectHandler);
-projects.get("/getAll", listProjectsHandler);
-projects.get("/get/:id", getProjectHandler);
-projects.patch("/update/:id", updateProjectHandler);
-projects.patch("/archive/:id", archiveProjectHandler);
-projects.patch("/restore/:id", restoreProjectHandler);
-projects.delete("/delete/:id", deleteProjectHandler);
+projectsRoutes.post("/create", createProjectHandler);
+projectsRoutes.get("/getAll", listProjectsHandler);
+projectsRoutes.get("/get/:id", getProjectHandler);
+projectsRoutes.patch("/update/:id", updateProjectHandler);
+projectsRoutes.patch("/archive/:id", archiveProjectHandler);
+projectsRoutes.patch("/restore/:id", restoreProjectHandler);
+projectsRoutes.delete("/delete/:id", deleteProjectHandler);
