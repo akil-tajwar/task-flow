@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import type { Project } from "../db/schema/projects";
+import type { Project } from "../db/schema/projects.schema";
 import * as projectsService from "../services/projects.service";
 import type {
   CreateProjectInput,

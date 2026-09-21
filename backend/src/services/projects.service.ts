@@ -1,6 +1,6 @@
 import { and, desc, eq, ilike, sql } from "drizzle-orm";
 import { db } from "../db";
-import { projects, type NewProject, type Project } from "../db/schema/projects";
+import { projects, type NewProject, type Project } from "../db/schema/projects.schema";
 
 export type CreateProjectInput = Omit<
   NewProject,

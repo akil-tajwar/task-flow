@@ -47,7 +47,7 @@ export const authController = {
   async listActivity(c: Context) {
     const user = c.get("user");
     const { page, limit } = c.req.query();
-    const isAdmin = user.role === "admin" || user.role === "super_admin";
+    const isAdmin = user.role === "admin";
     const result = await authService.listActivity(
       user.id,
       user.tenantId,
