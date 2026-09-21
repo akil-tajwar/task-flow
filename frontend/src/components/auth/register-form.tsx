@@ -1,16 +1,16 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useRegister } from '@/hooks/use-auth';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useRegister } from "@/hooks/use-auth";
 
 function toSlug(str: string): string {
   return str
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
     .slice(0, 50);
 }
 
@@ -18,33 +18,34 @@ export function RegisterForm() {
   const router = useRouter();
   const register = useRegister();
   const [form, setForm] = useState({
-    name: '',
-    tenantName: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
+    name: "",
+    tenantName: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
   });
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
-  const set = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setForm((p) => ({ ...p, [field]: e.target.value }));
+  const set =
+    (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+      setForm((p) => ({ ...p, [field]: e.target.value }));
 
   const slug = toSlug(form.tenantName);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError("");
 
     if (form.password !== form.confirmPassword) {
-      setError('Passwords do not match');
+      setError("Passwords do not match");
       return;
     }
     if (form.password.length < 8) {
-      setError('Password must be at least 8 characters');
+      setError("Password must be at least 8 characters");
       return;
     }
     if (!slug) {
-      setError('Business name is required');
+      setError("Workspace name is required");
       return;
     }
 
@@ -56,12 +57,13 @@ export function RegisterForm() {
         password: form.password,
         tenantSlug: slug,
       });
-      router.push('/dashboard');
+      router.push("/dashboard");
     } catch (err: unknown) {
       const msg =
         err instanceof Error
           ? err.message
-          : (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Registration failed';
+          : ((err as { response?: { data?: { error?: string } } })?.response
+              ?.data?.error ?? "Registration failed");
       setError(msg);
     }
   };
@@ -70,11 +72,13 @@ export function RegisterForm() {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Full Name</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            Full Name
+          </label>
           <input
             type="text"
             value={form.name}
-            onChange={set('name')}
+            onChange={set("name")}
             placeholder="John Doe"
             required
             minLength={2}
@@ -83,12 +87,14 @@ export function RegisterForm() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Business Name</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            Workspace Name
+          </label>
           <input
             type="text"
             value={form.tenantName}
-            onChange={set('tenantName')}
-            placeholder="My Store"
+            onChange={set("tenantName")}
+            placeholder="My Team"
             required
             minLength={2}
             className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition"
@@ -102,11 +108,13 @@ export function RegisterForm() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+          Email
+        </label>
         <input
           type="email"
           value={form.email}
-          onChange={set('email')}
+          onChange={set("email")}
           placeholder="you@company.com"
           required
           className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition"
@@ -115,11 +123,13 @@ export function RegisterForm() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            Password
+          </label>
           <input
             type="password"
             value={form.password}
-            onChange={set('password')}
+            onChange={set("password")}
             placeholder="Min 8 characters"
             required
             minLength={8}
@@ -128,11 +138,13 @@ export function RegisterForm() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirm Password</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            Confirm Password
+          </label>
           <input
             type="password"
             value={form.confirmPassword}
-            onChange={set('confirmPassword')}
+            onChange={set("confirmPassword")}
             placeholder="••••••••"
             required
             className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition"
@@ -151,7 +163,7 @@ export function RegisterForm() {
         disabled={register.isPending}
         className="w-full rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
-        {register.isPending ? 'Creating account…' : 'Create Account'}
+        {register.isPending ? "Creating account…" : "Create Account"}
       </button>
 
       <p className="text-center text-xs text-gray-400">

@@ -7,7 +7,7 @@ import { ServiceWorkerRegister } from './_components/sw-register';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'POS System',
+  title: 'Task Flow',
   description: 'Multi-tenant Point of Sale System',
   manifest: '/manifest.json',
   themeColor: '#4f46e5',

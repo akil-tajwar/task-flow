@@ -1,5 +1,5 @@
 {
-  "name": "POS System",
+  "name": "Task Flow",
   "short_name": "POS",
   "description": "Multi-tenant Point of Sale System",
   "start_url": "/sales/invoices/new",
