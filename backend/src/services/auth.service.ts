@@ -166,6 +166,41 @@ export const authService = {
     });
   },
 
+  async getAllUsers(tenantId: string, page = 1, limit = 20) {
+    const currentPage = Math.max(1, page);
+    const currentLimit = Math.max(1, limit);
+    const offset = (currentPage - 1) * currentLimit;
+
+    const where = eq(users.tenantId, tenantId);
+
+    const [rows, [countRow]] = await Promise.all([
+      db.query.users.findMany({
+        where,
+        columns: {
+          id: true,
+          tenantId: true,
+          name: true,
+          email: true,
+          role: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        limit: currentLimit,
+        offset,
+        orderBy: [desc(users.createdAt)],
+      }),
+
+      db
+        .select({
+          total: db.$count(users, where),
+        })
+        .from(users)
+        .where(where),
+    ]);
+
+    return rows
+  },
+
   async listActivity(
     userId: string,
     tenantId: string,
