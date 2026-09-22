@@ -1,6 +1,10 @@
 import { and, desc, eq, ilike, sql } from "drizzle-orm";
 import { db } from "../db";
-import { projects, type NewProject, type Project } from "../db/schema/projects.schema";
+import {
+  projects,
+  type NewProject,
+  type Project,
+} from "../db/schema/projects.schema";
 
 export type CreateProjectInput = Omit<
   NewProject,
@@ -65,15 +69,7 @@ export async function listProjects(tenantId: string, query: ListProjectsQuery) {
       .where(whereClause),
   ]);
 
-  return {
-    data: rows,
-    pagination: {
-      page,
-      limit,
-      total: count,
-      totalPages: Math.ceil(count / limit),
-    },
-  };
+  return rows;
 }
 
 export async function getProjectById(
@@ -110,7 +106,12 @@ export async function archiveProject(
 ): Promise<Project> {
   const [archived] = await db
     .update(projects)
-    .set({ status: "archived", archivedAt: new Date(), updatedAt: new Date() })
+    .set({
+      status: "archived",
+      isArchived: true,
+      archivedAt: new Date(),
+      updatedAt: new Date(),
+    })
     .where(scopedProject(tenantId, id))
     .returning();
 
@@ -124,7 +125,12 @@ export async function restoreProject(
 ): Promise<Project> {
   const [restored] = await db
     .update(projects)
-    .set({ status: "active", archivedAt: null, updatedAt: new Date() })
+    .set({
+      status: "active",
+      isArchived: false,
+      archivedAt: null,
+      updatedAt: new Date(),
+    })
     .where(scopedProject(tenantId, id))
     .returning();
 

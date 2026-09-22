@@ -63,6 +63,7 @@ export const projects = pgTable(
     currency: varchar("currency", { length: 3 }).default("USD"),
     isBillable: boolean("is_billable").notNull().default(true),
     isTemplate: boolean("is_template").notNull().default(false),
+    isArchived: boolean("is_archived").notNull().default(false),
     templateSourceId: uuid("template_source_id").references(
       (): AnyPgColumn => projects.id,
       { onDelete: "set null" },
