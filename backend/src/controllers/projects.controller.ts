@@ -9,13 +9,17 @@ import type {
 
 export async function createProjectHandler(c: Context) {
   const tenantId = c.get("tenantId") as string;
+
   const input = await c.req.json<CreateProjectInput>();
+
   const project = await projectsService.createProject(tenantId, input);
+
   return c.json(project, 201);
 }
 
-export async function listProjectsHandler(c: Context) {
+export async function getProjectsHandler(c: Context) {
   const tenantId = c.get("tenantId") as string;
+
   const { status, clientId, ownerId, isTemplate, search, page, limit } =
     c.req.query();
 
@@ -29,57 +33,74 @@ export async function listProjectsHandler(c: Context) {
     limit: limit !== undefined ? Number(limit) : undefined,
   };
 
-  const result = await projectsService.listProjects(tenantId, query);
+  const result = await projectsService.getProjects(tenantId, query);
+
   return c.json(result, 200);
 }
 
 export async function getProjectHandler(c: Context) {
   const tenantId = c.get("tenantId") as string;
   const id = c.req.param("id");
+
   if (!id) {
     return c.json({ error: "Project ID is required" }, 400);
   }
-  const project = await projectsService.getProjectById(tenantId, id);
+
+  const project = await projectsService.getProjectDetails(tenantId, id);
+
   return c.json(project, 200);
 }
 
 export async function updateProjectHandler(c: Context) {
   const tenantId = c.get("tenantId") as string;
   const id = c.req.param("id");
+
   if (!id) {
     return c.json({ error: "Project ID is required" }, 400);
   }
+
   const input = await c.req.json<UpdateProjectInput>();
+
   const project = await projectsService.updateProject(tenantId, id, input);
+
   return c.json(project, 200);
 }
 
 export async function archiveProjectHandler(c: Context) {
   const tenantId = c.get("tenantId") as string;
   const id = c.req.param("id");
+
   if (!id) {
     return c.json({ error: "Project ID is required" }, 400);
   }
+
   const project = await projectsService.archiveProject(tenantId, id);
+
   return c.json(project, 200);
 }
 
 export async function restoreProjectHandler(c: Context) {
   const tenantId = c.get("tenantId") as string;
   const id = c.req.param("id");
+
   if (!id) {
     return c.json({ error: "Project ID is required" }, 400);
   }
+
   const project = await projectsService.restoreProject(tenantId, id);
+
   return c.json(project, 200);
 }
 
 export async function deleteProjectHandler(c: Context) {
   const tenantId = c.get("tenantId") as string;
   const id = c.req.param("id");
+
   if (!id) {
     return c.json({ error: "Project ID is required" }, 400);
   }
+
   await projectsService.deleteProject(tenantId, id);
+
   return c.body(null, 204);
 }

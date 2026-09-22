@@ -6,7 +6,7 @@ import {
   createProjectHandler,
   deleteProjectHandler,
   getProjectHandler,
-  listProjectsHandler,
+  getProjectsHandler,
   restoreProjectHandler,
   updateProjectHandler,
 } from "../controllers/projects.controller";
@@ -16,7 +16,7 @@ export const projectsRoutes = new Hono();
 projectsRoutes.use("*", authMiddleware, tenantMiddleware);
 
 projectsRoutes.post("/create", createProjectHandler);
-projectsRoutes.get("/getAll", listProjectsHandler);
+projectsRoutes.get("/getAll", getProjectsHandler);
 projectsRoutes.get("/get/:id", getProjectHandler);
 projectsRoutes.patch("/update/:id", updateProjectHandler);
 projectsRoutes.patch("/archive/:id", archiveProjectHandler);
