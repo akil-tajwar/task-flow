@@ -64,6 +64,7 @@ export const projects = pgTable(
     isBillable: boolean("is_billable").notNull().default(true),
     isTemplate: boolean("is_template").notNull().default(false),
     isArchived: boolean("is_archived").notNull().default(false),
+    archivedAt: timestamp("archived_at"),
     templateSourceId: uuid("template_source_id").references(
       (): AnyPgColumn => projects.id,
       { onDelete: "set null" },
@@ -73,9 +74,6 @@ export const projects = pgTable(
     }),
     color: varchar("color", { length: 7 }),
     tags: jsonb("tags").$type<string[]>().default([]),
-    customFields: jsonb("custom_fields").$type<Record<string, unknown>>(),
-    settings: jsonb("settings").$type<Record<string, unknown>>(),
-    archivedAt: timestamp("archived_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
@@ -97,10 +95,8 @@ export const projectMembers = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    role: varchar("role", { length: 100 }).default("member"),
-    hourlyRate: decimal("hourly_rate", { precision: 10, scale: 2 }),
-    billableRate: decimal("billable_rate", { precision: 10, scale: 2 }),
-    addedAt: timestamp("added_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.projectId, t.userId] })],
 );
