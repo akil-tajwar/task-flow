@@ -10,6 +10,7 @@ router.post("/login", rateLimitMiddleware(10, 60), authController.login);
 router.post("/refresh", authController.refresh);
 router.post("/logout", authMiddleware, authController.logout);
 router.get("/me", authMiddleware, authController.me);
+router.get("/getAllUsers", authMiddleware, authController.getAllUsers);
 router.get("/activity", authMiddleware, authController.listActivity);
 
 export { router as authRoutes };

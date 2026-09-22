@@ -35,6 +35,17 @@ export const authController = {
     return c.json({ message: "Logged out" });
   },
 
+  async getAllUsers(c: Context) {
+    const user = c.get("user");
+    const { page, limit } = c.req.query();
+    const result = await authService.getAllUsers(
+      user.tenantId,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 20,
+    );
+    return c.json(result);
+  },
+
   async me(c: Context) {
     const { id, tenantId, role } = c.get("user");
     const user = await authService.getMe(id);
