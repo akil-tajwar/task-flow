@@ -8,6 +8,7 @@ import {
   type Project,
 } from "../db/schema/projects.schema";
 import { users } from "../db/schema/users.schema";
+import { tasks } from "../db/schema/tasks.schema";
 
 export type CreateProjectMemberInput = {
   userId: string;
@@ -261,6 +262,17 @@ export async function getProjects(tenantId: string, query: ListProjectsQuery) {
       .orderBy(milestones.sortOrder, milestones.createdAt),
   ]);
 
+  const milestoneIds = milestoneRows.map((milestone) => milestone.id);
+
+  const taskRows =
+    milestoneIds.length > 0
+      ? await db
+          .select()
+          .from(tasks)
+          .where(inArray(tasks.milestoneId, milestoneIds))
+          .orderBy(tasks.sortOrder, tasks.createdAt)
+      : [];
+
   const data = rows.map((project) => ({
     ...project,
 
@@ -268,9 +280,13 @@ export async function getProjects(tenantId: string, query: ListProjectsQuery) {
       (member) => member.projectId === project.id,
     ),
 
-    milestones: milestoneRows.filter(
-      (milestone) => milestone.projectId === project.id,
-    ),
+    milestones: milestoneRows
+      .filter((milestone) => milestone.projectId === project.id)
+      .map((milestone) => ({
+        ...milestone,
+
+        tasks: taskRows.filter((task) => task.milestoneId === milestone.id),
+      })),
   }));
 
   return data;
