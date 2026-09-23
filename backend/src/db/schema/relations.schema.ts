@@ -3,7 +3,7 @@ import { tenants } from "./tenants.schema";
 import { users } from "./users.schema";
 import { roles, userRoles } from "./roles.schema";
 import { clients } from "./clients.schema";
-import { projects, projectMembers, milestones, taskLists } from "./projects.schema";
+import { projects, projectMembers, milestones } from "./projects.schema";
 import { tasks, taskDependencies, comments } from "./tasks.schema";
 import { timeEntries, calendarEvents } from "./time-tracking.schema";
 import {
@@ -82,7 +82,6 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   owner: one(users, { fields: [projects.ownerId], references: [users.id] }),
   members: many(projectMembers),
   milestones: many(milestones),
-  taskLists: many(taskLists),
   tasks: many(tasks),
   comments: many(comments),
   budgets: many(budgets),
@@ -109,23 +108,11 @@ export const milestonesRelations = relations(milestones, ({ one, many }) => ({
   tasks: many(tasks),
 }));
 
-export const taskListsRelations = relations(taskLists, ({ one, many }) => ({
-  project: one(projects, {
-    fields: [taskLists.projectId],
-    references: [projects.id],
-  }),
-  tasks: many(tasks),
-}));
-
 export const tasksRelations = relations(tasks, ({ one, many }) => ({
   tenant: one(tenants, { fields: [tasks.tenantId], references: [tenants.id] }),
   project: one(projects, {
     fields: [tasks.projectId],
     references: [projects.id],
-  }),
-  taskList: one(taskLists, {
-    fields: [tasks.taskListId],
-    references: [taskLists.id],
   }),
   milestone: one(milestones, {
     fields: [tasks.milestoneId],

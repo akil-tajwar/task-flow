@@ -16,7 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants.schema";
 import { users } from "./users.schema";
-import { projects, taskLists, milestones } from "./projects.schema";
+import { projects, milestones } from "./projects.schema";
 
 export const taskStatusEnum = pgEnum("task_status", [
   "todo",
@@ -43,9 +43,6 @@ export const tasks = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
-    taskListId: uuid("task_list_id").references(() => taskLists.id, {
-      onDelete: "set null",
-    }),
     parentTaskId: uuid("parent_task_id").references(
       (): AnyPgColumn => tasks.id,
       { onDelete: "cascade" },
@@ -71,14 +68,12 @@ export const tasks = pgTable(
     sortOrder: integer("sort_order").notNull().default(0),
     isBillable: boolean("is_billable").notNull().default(true),
     tags: jsonb("tags").$type<string[]>().default([]),
-    customFields: jsonb("custom_fields").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (t) => [
     index("tasks_tenant_idx").on(t.tenantId),
     index("tasks_project_idx").on(t.projectId),
-    index("tasks_list_idx").on(t.taskListId),
     index("tasks_assignee_idx").on(t.assigneeId),
     index("tasks_status_idx").on(t.status),
     index("tasks_parent_idx").on(t.parentTaskId),
