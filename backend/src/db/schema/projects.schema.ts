@@ -119,24 +119,6 @@ export const milestones = pgTable(
   (t) => [index("milestones_project_idx").on(t.projectId)],
 );
 
-export const taskLists = pgTable(
-  "task_lists",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    projectId: uuid("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
-    name: varchar("name", { length: 255 }).notNull(),
-    description: text("description"),
-    sortOrder: integer("sort_order").notNull().default(0),
-    isTemplate: boolean("is_template").notNull().default(false),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
-  },
-  (t) => [index("task_lists_project_idx").on(t.projectId)],
-);
-
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 export type Milestone = typeof milestones.$inferSelect;
-export type TaskList = typeof taskLists.$inferSelect;
