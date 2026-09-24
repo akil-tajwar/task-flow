@@ -16,6 +16,16 @@ export interface AuthUser {
   tenantId: string;
 }
 
+export interface AppUser {
+  id: string;
+  tenantId: string;
+  name: string;
+  email: string;
+  role: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Tenant {
   id: string;
   name: string;
