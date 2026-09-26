@@ -1,4 +1,5 @@
 import { and, desc, eq, ilike, inArray, sql } from "drizzle-orm";
+import bcrypt from "bcryptjs";
 import { db } from "../db";
 import {
   projects,
@@ -9,9 +10,29 @@ import {
 } from "../db/schema/projects.schema";
 import { users } from "../db/schema/users.schema";
 import { tasks } from "../db/schema/tasks.schema";
+import { notifications } from "../db/schema/notifications.schema";
+
+// ---------------------------------------------------------------
+// Input types
+// ---------------------------------------------------------------
 
 export type CreateProjectMemberInput = {
-  userId: string;
+  /**
+   * When true, the backend will create a new user using the
+   * name/email/password fields before creating the projectMember.
+   * Not persisted to the DB.
+   */
+  isNewMember?: boolean;
+
+  /** Required when isNewMember is false/undefined. */
+  userId?: string;
+
+  /** Required when isNewMember is true. */
+  name?: string;
+  email?: string;
+  password?: string;
+
+  /** Project-member role (not the user role). Defaults to "member". */
   role?: string;
   hourlyRate?: string | number | null;
   billableRate?: string | number | null;
@@ -64,15 +85,16 @@ export interface ProjectWithDetails extends Project {
   milestones: (typeof milestones.$inferSelect)[];
 }
 
+// ---------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------
+
 function scopedProject(tenantId: string, id: string) {
   return and(eq(projects.id, id), eq(projects.tenantId, tenantId));
 }
 
-/**
- * Get project members with the user's name.
- */
 async function getProjectMembers(
-  projectId: string,
+  projectId: string
 ): Promise<ProjectMemberResponse[]> {
   return db
     .select({
@@ -87,9 +109,6 @@ async function getProjectMembers(
     .where(eq(projectMembers.projectId, projectId));
 }
 
-/**
- * Get project milestones.
- */
 async function getProjectMilestones(projectId: string) {
   return db
     .select()
@@ -98,12 +117,9 @@ async function getProjectMilestones(projectId: string) {
     .orderBy(milestones.sortOrder, milestones.createdAt);
 }
 
-/**
- * Get project with members and milestones.
- */
 async function getProjectWithDetails(
   tenantId: string,
-  projectId: string,
+  projectId: string
 ): Promise<ProjectWithDetails> {
   const project = await getProjectById(tenantId, projectId);
 
@@ -120,11 +136,127 @@ async function getProjectWithDetails(
 }
 
 /**
+ * Resolve the userId for a project-member input.
+ * - If isNewMember, create the user (bcrypt-hashed password) and return it.
+ * - Otherwise, return the existing userId as-is.
+ *
+ * Throws `${email} is already used for an user` when a new user's email
+ * collides with an existing user.
+ *
+ * Must be called inside a transaction (tx) so that user creation rolls
+ * back if anything later fails.
+ */
+async function resolveProjectMemberUserId(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  tenantId: string,
+  member: CreateProjectMemberInput
+): Promise<string> {
+  if (member.isNewMember) {
+    if (!member.name || !member.email || !member.password) {
+      throw new Error(
+        "name, email and password are required when creating a new member"
+      );
+    }
+
+    const existing = await tx.query.users.findFirst({
+      where: eq(users.email, member.email),
+    });
+
+    if (existing) {
+      throw new Error(`${member.email} is already used for an user`);
+    }
+
+    const passwordHash = await bcrypt.hash(member.password, 12);
+
+    const [user] = await tx
+      .insert(users)
+      .values({
+        tenantId,
+        name: member.name,
+        email: member.email,
+        passwordHash,
+        role: "user",
+      })
+      .returning();
+
+    if (!user) {
+      throw new Error("Failed to create user");
+    }
+
+    return user.id;
+  }
+
+  if (!member.userId) {
+    throw new Error("userId is required for an existing member");
+  }
+
+  return member.userId;
+}
+
+/**
+ * Insert projectMember rows + matching notifications.
+ * Used by both create and update paths so behavior stays identical.
+ */
+async function insertProjectMembers(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  tenantId: string,
+  projectId: string,
+  projectName: string,
+  memberInputs: CreateProjectMemberInput[]
+) {
+  if (memberInputs.length === 0) return;
+
+  // Resolve/create all users first, keeping order aligned with memberInputs.
+  const resolved = await Promise.all(
+    memberInputs.map(async (member) => ({
+      member,
+      userId: await resolveProjectMemberUserId(tx, tenantId, member),
+    }))
+  );
+
+  const insertedMembers = await tx
+    .insert(projectMembers)
+    .values(
+      resolved.map(({ member, userId }) => ({
+        projectId,
+        userId,
+        role: member.role ?? "member",
+        hourlyRate: member.hourlyRate ?? null,
+        billableRate: member.billableRate ?? null,
+      }))
+    )
+    .returning();
+
+  const frontendUrl = process.env.FRONTEND_URL ?? "";
+
+  await tx.insert(notifications).values(
+    insertedMembers.map((inserted) => ({
+      tenantId,
+      userId: inserted.userId,
+      type: "project_assignment",
+      title: `You were assigned to project "${projectName}"`,
+      body: null,
+      linkUrl: `${frontendUrl}/projects/${projectId}`,
+      metadata: {
+        projectId,
+        projectMemberId: inserted.id,
+      },
+      isRead: false,
+      readAt: null,
+    }))
+  );
+}
+
+// ---------------------------------------------------------------
+// Service methods
+// ---------------------------------------------------------------
+
+/**
  * Create project with members and milestones.
  */
 export async function createProject(
   tenantId: string,
-  input: CreateProjectInput,
+  input: CreateProjectInput
 ): Promise<ProjectWithDetails> {
   const {
     projectMembers: memberInputs = [],
@@ -147,17 +279,13 @@ export async function createProject(
       throw new Error("Failed to create project");
     }
 
-    if (memberInputs.length > 0) {
-      await tx.insert(projectMembers).values(
-        memberInputs.map((member) => ({
-          projectId: createdProject.id,
-          userId: member.userId,
-          role: member.role ?? "member",
-          hourlyRate: member.hourlyRate ?? null,
-          billableRate: member.billableRate ?? null,
-        })),
-      );
-    }
+    await insertProjectMembers(
+      tx,
+      tenantId,
+      createdProject.id,
+      createdProject.name,
+      memberInputs
+    );
 
     if (milestoneInputs.length > 0) {
       await tx.insert(milestones).values(
@@ -169,7 +297,7 @@ export async function createProject(
           completedAt: milestone.completedAt ?? null,
           isCompleted: milestone.isCompleted ?? false,
           sortOrder: milestone.sortOrder ?? 0,
-        })),
+        }))
       );
     }
 
@@ -188,25 +316,12 @@ export async function getProjects(tenantId: string, query: ListProjectsQuery) {
 
   const conditions = [eq(projects.tenantId, tenantId)];
 
-  if (query.status) {
-    conditions.push(eq(projects.status, query.status));
-  }
-
-  if (query.clientId) {
-    conditions.push(eq(projects.clientId, query.clientId));
-  }
-
-  if (query.ownerId) {
-    conditions.push(eq(projects.ownerId, query.ownerId));
-  }
-
-  if (query.isTemplate !== undefined) {
+  if (query.status) conditions.push(eq(projects.status, query.status));
+  if (query.clientId) conditions.push(eq(projects.clientId, query.clientId));
+  if (query.ownerId) conditions.push(eq(projects.ownerId, query.ownerId));
+  if (query.isTemplate !== undefined)
     conditions.push(eq(projects.isTemplate, query.isTemplate));
-  }
-
-  if (query.search) {
-    conditions.push(ilike(projects.name, `%${query.search}%`));
-  }
+  if (query.search) conditions.push(ilike(projects.name, `%${query.search}%`));
 
   const whereClause = and(...conditions);
   const offset = (page - 1) * limit;
@@ -221,9 +336,7 @@ export async function getProjects(tenantId: string, query: ListProjectsQuery) {
       .offset(offset),
 
     db
-      .select({
-        count: sql<number>`count(*)::int`,
-      })
+      .select({ count: sql<number>`count(*)::int` })
       .from(projects)
       .where(whereClause),
   ]);
@@ -277,19 +390,26 @@ export async function getProjects(tenantId: string, query: ListProjectsQuery) {
     ...project,
 
     projectMembers: memberRows.filter(
-      (member) => member.projectId === project.id,
+      (member) => member.projectId === project.id
     ),
 
     milestones: milestoneRows
       .filter((milestone) => milestone.projectId === project.id)
       .map((milestone) => ({
         ...milestone,
-
         tasks: taskRows.filter((task) => task.milestoneId === milestone.id),
       })),
   }));
 
-  return data;
+  return {
+    data,
+    pagination: {
+      page,
+      limit,
+      total: count,
+      totalPages: Math.ceil(count / limit),
+    },
+  };
 }
 
 /**
@@ -297,7 +417,7 @@ export async function getProjects(tenantId: string, query: ListProjectsQuery) {
  */
 export async function getProjectById(
   tenantId: string,
-  id: string,
+  id: string
 ): Promise<Project> {
   const [row] = await db
     .select()
@@ -316,7 +436,7 @@ export async function getProjectById(
  */
 export async function getProjectDetails(
   tenantId: string,
-  id: string,
+  id: string
 ): Promise<ProjectWithDetails> {
   return getProjectWithDetails(tenantId, id);
 }
@@ -330,7 +450,7 @@ export async function getProjectDetails(
 export async function updateProject(
   tenantId: string,
   id: string,
-  input: UpdateProjectInput,
+  input: UpdateProjectInput
 ): Promise<ProjectWithDetails> {
   const {
     projectMembers: memberInputs,
@@ -352,30 +472,12 @@ export async function updateProject(
       throw new Error("Project not found");
     }
 
-    /**
-     * Replace project members only when projectMembers
-     * was actually provided in the request.
-     */
     if (memberInputs !== undefined) {
       await tx.delete(projectMembers).where(eq(projectMembers.projectId, id));
 
-      if (memberInputs.length > 0) {
-        await tx.insert(projectMembers).values(
-          memberInputs.map((member) => ({
-            projectId: id,
-            userId: member.userId,
-            role: member.role ?? "member",
-            hourlyRate: member.hourlyRate ?? null,
-            billableRate: member.billableRate ?? null,
-          })),
-        );
-      }
+      await insertProjectMembers(tx, tenantId, id, updated.name, memberInputs);
     }
 
-    /**
-     * Replace milestones only when milestones
-     * was actually provided in the request.
-     */
     if (milestoneInputs !== undefined) {
       await tx.delete(milestones).where(eq(milestones.projectId, id));
 
@@ -389,7 +491,7 @@ export async function updateProject(
             completedAt: milestone.completedAt ?? null,
             isCompleted: milestone.isCompleted ?? false,
             sortOrder: milestone.sortOrder ?? 0,
-          })),
+          }))
         );
       }
     }
@@ -405,7 +507,7 @@ export async function updateProject(
  */
 export async function archiveProject(
   tenantId: string,
-  id: string,
+  id: string
 ): Promise<ProjectWithDetails> {
   const [archived] = await db
     .update(projects)
@@ -430,7 +532,7 @@ export async function archiveProject(
  */
 export async function restoreProject(
   tenantId: string,
-  id: string,
+  id: string
 ): Promise<ProjectWithDetails> {
   const [restored] = await db
     .update(projects)
@@ -452,20 +554,15 @@ export async function restoreProject(
 
 /**
  * Delete project.
- *
- * projectMembers and milestones will be deleted automatically
- * because their projectId foreign keys use ON DELETE CASCADE.
  */
 export async function deleteProject(
   tenantId: string,
-  id: string,
+  id: string
 ): Promise<void> {
   const [deleted] = await db
     .delete(projects)
     .where(scopedProject(tenantId, id))
-    .returning({
-      id: projects.id,
-    });
+    .returning({ id: projects.id });
 
   if (!deleted) {
     throw new Error("Project not found");
