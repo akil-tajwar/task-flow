@@ -1,6 +1,11 @@
 import { and, desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "../db/index";
-import { tasks, taskDependencies, comments, notifications } from "../db/schema/index.schema";
+import {
+  tasks,
+  taskDependencies,
+  comments,
+  notifications,
+} from "../db/schema/index.schema";
 
 import type { NewTask, Comment } from "../validators/tasks.validator";
 
@@ -27,6 +32,10 @@ export const taskService = {
 
   async getAll(
     tenantId: string,
+    currentUser: {
+      id: string;
+      role: string;
+    },
     query: {
       page?: number;
       limit?: number;
@@ -68,6 +77,12 @@ export const taskService = {
 
     if (query.priority) {
       conditions.push(eq(tasks.priority, query.priority));
+    }
+
+    // Admin can see all tasks.
+    // Non-admin can only see their own assigned tasks.
+    if (currentUser.role !== "admin") {
+      conditions.push(eq(tasks.assigneeId, currentUser.id));
     }
 
     if (query.search) {

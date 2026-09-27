@@ -27,21 +27,27 @@ export const taskController = {
     const currentUser = c.get("user");
     const query = c.req.query();
 
-    const result = await taskService.getAll(currentUser.tenantId, {
-      page: query.page ? parseInt(query.page, 10) : 1,
+    const result = await taskService.getAll(
+      currentUser.tenantId,
+      {
+        id: currentUser.id,
+        role: currentUser.role,
+      },
+      {
+        page: query.page ? parseInt(query.page, 10) : 1,
+        limit: query.limit ? parseInt(query.limit, 10) : 20,
 
-      limit: query.limit ? parseInt(query.limit, 10) : 20,
+        projectId: query.projectId,
+        milestoneId: query.milestoneId,
+        parentTaskId: query.parentTaskId,
+        assigneeId: query.assigneeId,
 
-      projectId: query.projectId,
-      milestoneId: query.milestoneId,
-      parentTaskId: query.parentTaskId,
-      assigneeId: query.assigneeId,
+        status: query.status as any,
+        priority: query.priority as any,
 
-      status: query.status as any,
-      priority: query.priority as any,
-
-      search: query.search,
-    });
+        search: query.search,
+      },
+    );
 
     return c.json(result);
   },
