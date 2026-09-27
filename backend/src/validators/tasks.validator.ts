@@ -14,6 +14,7 @@ export const tasksSchema = z.object({
   creatorId: z.string().uuid().nullable(),
   startDate: z.string().nullable(),
   dueDate: z.string().nullable(),
+  isCompleted: z.boolean(),
   completedAt: z.date().nullable(),
   estimatedHours: z.string().nullable(),
   actualHours: z.string().nullable(),
@@ -26,6 +27,7 @@ export const tasksSchema = z.object({
 
 export const newTasksSchema = tasksSchema.omit({
   id: true,
+  tenantId: true,
   createdAt: true,
   updatedAt: true,
 });
