@@ -8,7 +8,7 @@ export const tasksSchema = z.object({
   milestoneId: z.string().uuid().nullable(),
   title: z.string().max(500),
   description: z.string().nullable(),
-  status: z.enum(["todo", "in_progress", "in_review", "done", "blocked"]),
+  status: z.enum(["in_progress", "in_review", "done", "blocked"]),
   priority: z.enum(["low", "medium", "high", "urgent"]),
   assigneeId: z.string().uuid().nullable(),
   creatorId: z.string().uuid().nullable(),

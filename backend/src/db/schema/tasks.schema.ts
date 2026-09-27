@@ -19,7 +19,6 @@ import { users } from "./users.schema";
 import { projects, milestones } from "./projects.schema";
 
 export const taskStatusEnum = pgEnum("task_status", [
-  "todo",
   "in_progress",
   "in_review",
   "done",
@@ -52,7 +51,7 @@ export const tasks = pgTable(
     }),
     title: varchar("title", { length: 500 }).notNull(),
     description: text("description"),
-    status: taskStatusEnum("status").notNull().default("todo"),
+    status: taskStatusEnum("status").notNull().default("in_progress"),
     priority: priorityEnum("priority").notNull().default("medium"),
     assigneeId: uuid("assignee_id").references(() => users.id, {
       onDelete: "set null",

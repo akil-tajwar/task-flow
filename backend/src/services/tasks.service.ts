@@ -4,7 +4,6 @@ import {
   tasks,
   taskDependencies,
   comments,
-  projects,
 } from "../db/schema/index.schema";
 
 import type { NewTask, Comment } from "../validators/tasks.validator";
@@ -23,7 +22,7 @@ export const taskService = {
         ...input,
         tenantId,
         isCompleted: false,
-        status: "todo",
+        status: "in_progress",
       })
       .returning();
 
@@ -39,7 +38,7 @@ export const taskService = {
       milestoneId?: string;
       parentTaskId?: string;
       assigneeId?: string;
-      status?: "todo" | "in_progress" | "in_review" | "done" | "blocked";
+      status?: "in_progress" | "in_review" | "done" | "blocked";
       priority?: "low" | "medium" | "high" | "urgent";
       search?: string;
     },
