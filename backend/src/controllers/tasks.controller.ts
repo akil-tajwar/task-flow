@@ -1,25 +1,25 @@
 import type { Context } from "hono";
-
 import { taskService } from "../services/tasks.service";
 import { newTasksSchema } from "../validators/tasks.validator";
+import path from "path";
+import fs from "fs/promises";
+import crypto from "crypto";
 
-const BASE_URL =
-  process.env.BASE_URL ?? `http://localhost:${process.env.PORT ?? 4000}`;
+const UPLOAD_DIR = path.join(process.cwd(), "uploads", "comments");
+const BASE_URL = process.env.BASE_URL ?? "http://localhost:4000";
 
-type MulterFile = {
-  filename: string;
-  originalname: string;
-  mimetype: string;
-  size: number;
-};
-
-function normalizeFiles(
-  files: MulterFile[] | Record<string, MulterFile[]> | undefined,
-): MulterFile[] {
-  if (!files) return [];
-  if (Array.isArray(files)) return files;
-  return Object.values(files).flat();
-}
+const ALLOWED_MIME = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/plain",
+  "application/zip",
+]);
 
 export const taskController = {
   // =========================================================
@@ -64,7 +64,7 @@ export const taskController = {
         priority: query.priority as any,
 
         search: query.search,
-      },
+      }
     );
 
     return c.json(result);
@@ -183,7 +183,7 @@ export const taskController = {
       currentUser.tenantId,
       body.taskId,
       body.dependsOnTaskId,
-      body.type ?? "blocks",
+      body.type ?? "blocks"
     );
 
     return c.json(dependency, 201);
@@ -197,7 +197,7 @@ export const taskController = {
     }
     const dependencies = await taskService.getDependencies(
       currentUser.tenantId,
-      taskId,
+      taskId
     );
 
     return c.json(dependencies);
@@ -213,7 +213,7 @@ export const taskController = {
 
     const result = await taskService.deleteDependency(
       currentUser.tenantId,
-      dependencyId,
+      dependencyId
     );
 
     return c.json(result);
@@ -230,39 +230,12 @@ export const taskController = {
     const contentType = c.req.header("content-type") ?? "";
     console.log("📦 content-type:", contentType);
 
-    // Multer stores parsed fields/files on the raw Express-style request
-    const rawReq = c.req.raw as unknown as {
-      body?: Record<string, string>;
-      files?:
-        | Array<{
-            filename: string;
-            originalname: string;
-            mimetype: string;
-            size: number;
-          }>
-        | Record<
-            string,
-            Array<{
-              filename: string;
-              originalname: string;
-              mimetype: string;
-              size: number;
-            }>
-          >;
-    };
+    // 👇 Hono parses multipart natively — fields + files
+    const body = await c.req.parseBody({ all: true });
 
-    const body = rawReq.body ?? {};
-    const rawFiles = rawReq.files;
+    console.log("📦 parsed body keys:", Object.keys(body));
 
-    const files = Array.isArray(rawFiles)
-      ? rawFiles
-      : rawFiles
-        ? Object.values(rawFiles).flat()
-        : [];
-
-    console.log("📦 body:", body);
-    console.log("📦 files count:", files.length);
-
+    // Text fields come back as strings; files come back as File | File[]
     const taskId = typeof body.taskId === "string" ? body.taskId : "";
     const content = typeof body.content === "string" ? body.content : "";
     const parentCommentId =
@@ -270,34 +243,79 @@ export const taskController = {
         ? body.parentCommentId
         : null;
 
-    if (!taskId) {
-      return c.json({ error: "Task ID is required" }, 400);
-    }
-    if (!content.trim()) {
+    console.log("🧾 fields:", { taskId, content, parentCommentId });
+
+    if (!taskId) return c.json({ error: "Task ID is required" }, 400);
+    if (!content.trim())
       return c.json({ error: "Comment content is required" }, 400);
+
+    // Normalize files to an array
+    const rawFiles = body.attachments ?? body["attachments[]"];
+    const fileList: File[] = Array.isArray(rawFiles)
+      ? rawFiles.filter((item): item is File => item instanceof File)
+      : rawFiles instanceof File
+      ? [rawFiles]
+      : [];
+
+    console.log("📎 files received:", fileList.length);
+
+    if (fileList.length === 0) {
+      // No files — still create the comment
+      const comment = await taskService.createComment(
+        currentUser.tenantId,
+        currentUser.id,
+        { taskId, content, parentCommentId, attachments: null }
+      );
+      return c.json(comment, 201);
     }
 
-    // ✅ Build the full URL here
-    const BASE_URL = process.env.BASE_URL ?? "http://localhost:4000";
+    // Ensure upload dir exists
+    await fs.mkdir(UPLOAD_DIR, { recursive: true });
 
-    const attachments =
-      files.length > 0
-        ? files.map((f) => ({
-            name: f.originalname,
-            url: `${BASE_URL}/uploads/comments/${f.filename}`,
-            size: f.size,
-            type: f.mimetype,
-          }))
-        : null;
+    const attachments: Array<{
+      name: string;
+      url: string;
+      size: number;
+      type: string;
+    }> = [];
+
+    for (const file of fileList) {
+      if (!ALLOWED_MIME.has(file.type)) {
+        console.warn("⚠️ unsupported mime:", file.type);
+        continue; // or throw
+      }
+
+      const ext = path.extname(file.name).toLowerCase();
+      const filename = `${Date.now()}-${crypto.randomInt(1000, 999999)}${ext}`;
+      const fullPath = path.join(UPLOAD_DIR, filename);
+
+      const buffer = Buffer.from(await file.arrayBuffer());
+      await fs.writeFile(fullPath, buffer);
+
+      console.log("💾 saved:", filename, `(${buffer.length} bytes)`);
+
+      attachments.push({
+        name: file.name,
+        url: `${BASE_URL}/uploads/comments/${filename}`,
+        size: file.size,
+        type: file.type,
+      });
+    }
 
     console.log("🔗 attachments to persist:", attachments);
 
     const comment = await taskService.createComment(
       currentUser.tenantId,
       currentUser.id,
-      { taskId, content, parentCommentId, attachments },
+      {
+        taskId,
+        content,
+        parentCommentId,
+        attachments: attachments.length ? attachments : null,
+      }
     );
 
+    console.log("✅ comment created:", comment?.id);
     return c.json(comment, 201);
   },
 
@@ -309,7 +327,7 @@ export const taskController = {
     }
     const result = await taskService.getTaskComments(
       currentUser.tenantId,
-      taskId,
+      taskId
     );
 
     return c.json(result);
@@ -346,7 +364,7 @@ export const taskController = {
       currentUser.tenantId,
       currentUser.id,
       id,
-      body.content,
+      body.content
     );
 
     return c.json(comment);
@@ -363,7 +381,7 @@ export const taskController = {
     const result = await taskService.deleteComment(
       currentUser.tenantId,
       currentUser.id,
-      id,
+      id
     );
 
     return c.json(result);

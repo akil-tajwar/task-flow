@@ -2,8 +2,6 @@ import { Hono } from "hono";
 import { authMiddleware } from "../middleware/auth.middleware";
 import { tenantMiddleware } from "../middleware/tenant.middleware";
 import { taskController } from "../controllers/tasks.controller";
-import { commentUpload } from "../middleware/multer.middleware";
-import { runMulter } from "../lib/multer";
 
 export const tasksRoutes = new Hono();
 
@@ -38,11 +36,7 @@ tasksRoutes.delete(
 // COMMENTS
 // =========================================================
 
-tasksRoutes.post(
-  "/comments/create",
-  runMulter(commentUpload.array("attachments", 10)),
-  taskController.createComment,
-);
+tasksRoutes.post("/comments/create", taskController.createComment);
 tasksRoutes.get("/comments/getAll/:taskId", taskController.getTaskComments);
 tasksRoutes.get("/comments/getById/:commentId", taskController.getCommentById);
 tasksRoutes.put("/comments/update/:commentId", taskController.updateComment);
