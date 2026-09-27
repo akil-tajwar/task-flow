@@ -18,6 +18,10 @@ tasksRoutes.get("/getById/:id", taskController.getById);
 tasksRoutes.post("/create", taskController.create);
 tasksRoutes.put("/edit/:id", taskController.update);
 tasksRoutes.delete("/delete/:id", taskController.delete);
+tasksRoutes.get("/getInReview", taskController.getInReview);
+tasksRoutes.patch("/submit/:id", taskController.submit);
+tasksRoutes.patch("/done/:id", taskController.done);
+tasksRoutes.patch("/blocked/:id", taskController.blocked);
 
 // =========================================================
 // DEPENDENCIES

@@ -87,6 +87,65 @@ export const taskController = {
     return c.json(result);
   },
 
+  async submit(c: Context) {
+    const currentUser = c.get("user");
+    const id = c.req.param("id");
+
+    if (!id) {
+      return c.json({ error: "Task ID is required" }, 400);
+    }
+
+    const task = await taskService.submitForReview(currentUser.tenantId, id);
+
+    return c.json(task);
+  },
+
+  async done(c: Context) {
+    const currentUser = c.get("user");
+    const id = c.req.param("id");
+
+    if (!id) {
+      return c.json({ error: "Task ID is required" }, 400);
+    }
+
+    const task = await taskService.markDone(currentUser.tenantId, id);
+
+    return c.json(task);
+  },
+
+  async blocked(c: Context) {
+    const currentUser = c.get("user");
+    const id = c.req.param("id");
+
+    if (!id) {
+      return c.json({ error: "Task ID is required" }, 400);
+    }
+
+    const task = await taskService.markBlocked(currentUser.tenantId, id);
+
+    return c.json(task);
+  },
+
+  async getInReview(c: Context) {
+    const currentUser = c.get("user");
+    const query = c.req.query();
+
+    const result = await taskService.getInReview(currentUser.tenantId, {
+      page: query.page ? parseInt(query.page, 10) : 1,
+      limit: query.limit ? parseInt(query.limit, 10) : 20,
+
+      projectId: query.projectId,
+      milestoneId: query.milestoneId,
+      parentTaskId: query.parentTaskId,
+      assigneeId: query.assigneeId,
+
+      priority: query.priority as any,
+      search: query.search,
+    });
+
+    return c.json(result);
+  },
+
   // =========================================================
   // DEPENDENCIES
   // =========================================================
