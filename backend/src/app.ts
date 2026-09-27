@@ -13,17 +13,17 @@ app.use("*", logger());
 app.use("*", secureHeaders());
 app.use("*", cors({ origin: env.FRONTEND_URL, credentials: true }));
 
-app.route("/api", routes);
-
-app.get("/health", (c) => c.json({ status: "ok" }));
-
 app.use(
   "/uploads/*",
   serveStatic({
     root: "./",
-    // or: root: path.relative(process.cwd(), path.join(process.cwd(), "uploads"))
+    // /uploads/comments/x.png  ->  ./uploads/comments/x.png
   }),
 );
+
+app.route("/api", routes);
+
+app.get("/health", (c) => c.json({ status: "ok" }));
 
 
 app.onError((err, c) => {

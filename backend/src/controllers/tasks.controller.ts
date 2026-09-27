@@ -224,16 +224,44 @@ export const taskController = {
   // =========================================================
 
   async createComment(c: Context) {
-    const currentUser = c.get("user");
+    console.log("🚀 [controller:createComment] entered");
 
-    // multer populates these on the raw Express-style request
-    const rawReq = c.req.raw as unknown as Request & {
+    const currentUser = c.get("user");
+    const contentType = c.req.header("content-type") ?? "";
+    console.log("📦 content-type:", contentType);
+
+    // Multer stores parsed fields/files on the raw Express-style request
+    const rawReq = c.req.raw as unknown as {
       body?: Record<string, string>;
-      files?: MulterFile[] | Record<string, MulterFile[]>;
+      files?:
+        | Array<{
+            filename: string;
+            originalname: string;
+            mimetype: string;
+            size: number;
+          }>
+        | Record<
+            string,
+            Array<{
+              filename: string;
+              originalname: string;
+              mimetype: string;
+              size: number;
+            }>
+          >;
     };
 
     const body = rawReq.body ?? {};
-    const files = normalizeFiles(rawReq.files);
+    const rawFiles = rawReq.files;
+
+    const files = Array.isArray(rawFiles)
+      ? rawFiles
+      : rawFiles
+        ? Object.values(rawFiles).flat()
+        : [];
+
+    console.log("📦 body:", body);
+    console.log("📦 files count:", files.length);
 
     const taskId = typeof body.taskId === "string" ? body.taskId : "";
     const content = typeof body.content === "string" ? body.content : "";
@@ -242,19 +270,27 @@ export const taskController = {
         ? body.parentCommentId
         : null;
 
-    if (!taskId) return c.json({ error: "Task ID is required" }, 400);
-    if (!content.trim())
+    if (!taskId) {
+      return c.json({ error: "Task ID is required" }, 400);
+    }
+    if (!content.trim()) {
       return c.json({ error: "Comment content is required" }, 400);
+    }
 
-    // Build attachments from uploaded files
-    const attachments = files.length
-      ? files.map((f) => ({
-          name: f.originalname,
-          url: `${BASE_URL}/uploads/comments/${f.filename}`,
-          size: f.size,
-          type: f.mimetype,
-        }))
-      : null;
+    // ✅ Build the full URL here
+    const BASE_URL = process.env.BASE_URL ?? "http://localhost:4000";
+
+    const attachments =
+      files.length > 0
+        ? files.map((f) => ({
+            name: f.originalname,
+            url: `${BASE_URL}/uploads/comments/${f.filename}`,
+            size: f.size,
+            type: f.mimetype,
+          }))
+        : null;
+
+    console.log("🔗 attachments to persist:", attachments);
 
     const comment = await taskService.createComment(
       currentUser.tenantId,
