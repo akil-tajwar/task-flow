@@ -15,11 +15,15 @@ export const taskService = {
   // =========================================================
 
   async create(tenantId: string, input: NewTask) {
+    console.log("🚀 [service] entered", { tenantId, input });
+
     const [task] = await db
       .insert(tasks)
       .values({
         ...input,
         tenantId,
+        isCompleted: false,
+        status: "todo",
       })
       .returning();
 

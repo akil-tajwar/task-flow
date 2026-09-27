@@ -9,12 +9,17 @@ export const taskController = {
   // =========================================================
 
   async create(c: Context) {
-    const currentUser = c.get("user");
+    console.log("🚀 [controller] entered");
 
+    const currentUser = c.get("user");
     const input = newTasksSchema.parse(await c.req.json());
 
-    const task = await taskService.create(currentUser.tenantId, input);
+    const task = await taskService.create(currentUser.tenantId, {
+      ...input,
+      creatorId: currentUser.id,
+    });
 
+    console.log("🚀 [controller] task:", task);
     return c.json(task, 201);
   },
 
