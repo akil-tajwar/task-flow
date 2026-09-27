@@ -3,6 +3,24 @@ import type { Context } from "hono";
 import { taskService } from "../services/tasks.service";
 import { newTasksSchema } from "../validators/tasks.validator";
 
+const BASE_URL =
+  process.env.BASE_URL ?? `http://localhost:${process.env.PORT ?? 4000}`;
+
+type MulterFile = {
+  filename: string;
+  originalname: string;
+  mimetype: string;
+  size: number;
+};
+
+function normalizeFiles(
+  files: MulterFile[] | Record<string, MulterFile[]> | undefined,
+): MulterFile[] {
+  if (!files) return [];
+  if (Array.isArray(files)) return files;
+  return Object.values(files).flat();
+}
+
 export const taskController = {
   // =========================================================
   // TASKS
@@ -207,8 +225,15 @@ export const taskController = {
 
   async createComment(c: Context) {
     const currentUser = c.get("user");
-    const body = await c.req.json();
-    console.log("🚀 ~ body:", body);
+
+    // multer populates these on the raw Express-style request
+    const rawReq = c.req.raw as unknown as Request & {
+      body?: Record<string, string>;
+      files?: MulterFile[] | Record<string, MulterFile[]>;
+    };
+
+    const body = rawReq.body ?? {};
+    const files = normalizeFiles(rawReq.files);
 
     const taskId = typeof body.taskId === "string" ? body.taskId : "";
     const content = typeof body.content === "string" ? body.content : "";
@@ -217,20 +242,17 @@ export const taskController = {
         ? body.parentCommentId
         : null;
 
-    if (!taskId) {
-      return c.json({ error: "Task ID is required" }, 400);
-    }
-    if (!content.trim()) {
+    if (!taskId) return c.json({ error: "Task ID is required" }, 400);
+    if (!content.trim())
       return c.json({ error: "Comment content is required" }, 400);
-    }
 
-    // JSON client can't upload files — accept pre-uploaded attachments if sent
-    const attachments = Array.isArray(body.attachments)
-      ? body.attachments.map((a: any) => ({
-          name: String(a.name),
-          url: String(a.url),
-          size: Number(a.size),
-          type: String(a.type),
+    // Build attachments from uploaded files
+    const attachments = files.length
+      ? files.map((f) => ({
+          name: f.originalname,
+          url: `${BASE_URL}/uploads/comments/${f.filename}`,
+          size: f.size,
+          type: f.mimetype,
         }))
       : null;
 

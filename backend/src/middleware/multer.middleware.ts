@@ -1,36 +1,26 @@
+// lib/multer.ts
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { Context, Next } from "hono";
+import { randomInt } from "crypto";
+import type { Context, Next } from "hono";
+import type { Request, Response, NextFunction } from "express";
 
 const uploadPath = path.join(process.cwd(), "uploads", "comments");
-
-fs.mkdirSync(uploadPath, {
-  recursive: true,
-});
+fs.mkdirSync(uploadPath, { recursive: true });
 
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadPath);
-  },
-
+  destination: (_req, _file, cb) => cb(null, uploadPath),
   filename: (_req, file, cb) => {
-    const extension = path.extname(file.originalname);
-
-    const filename = `${crypto.randomUUID()}${extension}`;
-
-    cb(null, filename);
+    const ext = path.extname(file.originalname).toLowerCase();
+    const unique = `${Date.now()}-${randomInt(1000, 999999)}`;
+    cb(null, `${unique}${ext}`);
   },
 });
 
 export const commentUpload = multer({
   storage,
-
-  limits: {
-    files: 10,
-    fileSize: 10 * 1024 * 1024,
-  },
-
+  limits: { files: 10, fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = [
       "image/jpeg",
@@ -44,34 +34,25 @@ export const commentUpload = multer({
       "text/plain",
       "application/zip",
     ];
-
     if (!allowed.includes(file.mimetype)) {
       cb(new Error(`Unsupported file type: ${file.mimetype}`));
-
       return;
     }
-
     cb(null, true);
   },
 });
 
-export function multerMiddleware(middleware: any) {
+export function runMulter(
+  middleware: (req: Request, res: Response, next: NextFunction) => void,
+) {
   return async (c: Context, next: Next) => {
     await new Promise<void>((resolve, reject) => {
       middleware(
         c.req.raw as unknown as Request,
         c.res as unknown as Response,
-        (error: unknown) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-
-          resolve();
-        },
+        (error?: unknown) => (error ? reject(error) : resolve()),
       );
     });
-
     await next();
   };
 }
