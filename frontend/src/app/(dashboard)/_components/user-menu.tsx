@@ -130,7 +130,7 @@ export function UserMenu() {
               role="menuitem"
               onClick={handleLogout}
               disabled={logout.isPending}
-              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-red-600
+              className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-red-600
                 hover:bg-red-50 active:bg-red-100 transition-colors rounded-lg mx-1 w-[calc(100%-8px)]
                 disabled:opacity-50 disabled:cursor-not-allowed"
             >
