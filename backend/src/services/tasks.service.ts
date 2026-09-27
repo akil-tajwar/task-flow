@@ -1,6 +1,12 @@
 import { and, desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "../db/index";
-import { tasks, taskDependencies, comments, notifications } from "../db/schema/index.schema";
+import {
+  tasks,
+  taskDependencies,
+  comments,
+  notifications,
+  users,
+} from "../db/schema/index.schema";
 
 import type { NewTask, Comment } from "../validators/tasks.validator";
 
@@ -481,10 +487,22 @@ export const taskService = {
       throw new Error("Task not found");
     }
 
-    return db.query.comments.findMany({
-      where: and(eq(comments.tenantId, tenantId), eq(comments.taskId, taskId)),
-      orderBy: [desc(comments.createdAt)],
-    });
+    return db
+      .select({
+        id: comments.id,
+        tenantId: comments.tenantId,
+        taskId: comments.taskId,
+        projectId: comments.projectId,
+        userId: comments.userId,
+        userName: users.name,
+        content: comments.content,
+        createdAt: comments.createdAt,
+        updatedAt: comments.updatedAt,
+      })
+      .from(comments)
+      .leftJoin(users, eq(comments.userId, users.id))
+      .where(and(eq(comments.tenantId, tenantId), eq(comments.taskId, taskId)))
+      .orderBy(desc(comments.createdAt));
   },
 
   async getCommentById(tenantId: string, id: string) {
