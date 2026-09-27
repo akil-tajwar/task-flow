@@ -1,6 +1,11 @@
 import { and, desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "../db/index";
-import { tasks, taskDependencies, comments, notifications } from "../db/schema/index.schema";
+import {
+  tasks,
+  taskDependencies,
+  comments,
+  notifications,
+} from "../db/schema/index.schema";
 
 import type { NewTask, Comment } from "../validators/tasks.validator";
 
@@ -27,6 +32,10 @@ export const taskService = {
 
   async getAll(
     tenantId: string,
+    currentUser: {
+      id: string;
+      role: string;
+    },
     query: {
       page?: number;
       limit?: number;
@@ -68,6 +77,12 @@ export const taskService = {
 
     if (query.priority) {
       conditions.push(eq(tasks.priority, query.priority));
+    }
+
+    // Admin can see all tasks.
+    // Non-admin can only see their own assigned tasks.
+    if (currentUser.role !== "admin") {
+      conditions.push(eq(tasks.assigneeId, currentUser.id));
     }
 
     if (query.search) {
@@ -434,15 +449,35 @@ export const taskService = {
       attachments?: Comment["attachments"];
     },
   ) {
+    console.log("🚀 [service:createComment] entered", {
+      tenantId,
+      userId,
+      input,
+    });
+
     const task = await db.query.tasks.findFirst({
       where: and(eq(tasks.id, input.taskId), eq(tasks.tenantId, tenantId)),
     });
 
+    console.log(
+      "🔎 [service:createComment] task lookup result:",
+      task ? { id: task.id, title: task.title } : null,
+    );
+
     if (!task) {
+      console.warn("⚠️ [service:createComment] task not found", {
+        taskId: input.taskId,
+        tenantId,
+      });
       throw new Error("Task not found");
     }
 
     if (input.parentCommentId) {
+      console.log(
+        "🔎 [service:createComment] checking parent comment:",
+        input.parentCommentId,
+      );
+
       const parentComment = await db.query.comments.findFirst({
         where: and(
           eq(comments.id, input.parentCommentId),
@@ -451,23 +486,42 @@ export const taskService = {
         ),
       });
 
+      console.log(
+        "🔎 [service:createComment] parent comment result:",
+        parentComment ? { id: parentComment.id } : null,
+      );
+
       if (!parentComment) {
+        console.warn("⚠️ [service:createComment] parent comment not found");
         throw new Error("Parent comment not found");
       }
     }
 
+    const valuesToInsert = {
+      tenantId,
+      taskId: input.taskId,
+      projectId: null,
+      userId,
+      content: input.content,
+      parentCommentId: input.parentCommentId ?? null,
+      attachments: input.attachments ?? null,
+    };
+
+    console.log("📥 [service:createComment] inserting values:", valuesToInsert);
+
     const [comment] = await db
       .insert(comments)
-      .values({
-        tenantId,
-        taskId: input.taskId,
-        projectId: null,
-        userId,
-        content: input.content,
-        parentCommentId: input.parentCommentId ?? null,
-        attachments: input.attachments ?? null,
-      })
+      .values(valuesToInsert)
       .returning();
+
+    console.log("✅ [service:createComment] inserted comment:", {
+      id: comment?.id,
+      taskId: comment?.taskId,
+      userId: comment?.userId,
+      attachmentCount: Array.isArray(comment?.attachments)
+        ? comment.attachments.length
+        : 0,
+    });
 
     return comment;
   },

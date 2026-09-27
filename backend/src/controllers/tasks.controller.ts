@@ -3,6 +3,24 @@ import type { Context } from "hono";
 import { taskService } from "../services/tasks.service";
 import { newTasksSchema } from "../validators/tasks.validator";
 
+const BASE_URL =
+  process.env.BASE_URL ?? `http://localhost:${process.env.PORT ?? 4000}`;
+
+type MulterFile = {
+  filename: string;
+  originalname: string;
+  mimetype: string;
+  size: number;
+};
+
+function normalizeFiles(
+  files: MulterFile[] | Record<string, MulterFile[]> | undefined,
+): MulterFile[] {
+  if (!files) return [];
+  if (Array.isArray(files)) return files;
+  return Object.values(files).flat();
+}
+
 export const taskController = {
   // =========================================================
   // TASKS
@@ -27,21 +45,27 @@ export const taskController = {
     const currentUser = c.get("user");
     const query = c.req.query();
 
-    const result = await taskService.getAll(currentUser.tenantId, {
-      page: query.page ? parseInt(query.page, 10) : 1,
+    const result = await taskService.getAll(
+      currentUser.tenantId,
+      {
+        id: currentUser.id,
+        role: currentUser.role,
+      },
+      {
+        page: query.page ? parseInt(query.page, 10) : 1,
+        limit: query.limit ? parseInt(query.limit, 10) : 20,
 
-      limit: query.limit ? parseInt(query.limit, 10) : 20,
+        projectId: query.projectId,
+        milestoneId: query.milestoneId,
+        parentTaskId: query.parentTaskId,
+        assigneeId: query.assigneeId,
 
-      projectId: query.projectId,
-      milestoneId: query.milestoneId,
-      parentTaskId: query.parentTaskId,
-      assigneeId: query.assigneeId,
+        status: query.status as any,
+        priority: query.priority as any,
 
-      status: query.status as any,
-      priority: query.priority as any,
-
-      search: query.search,
-    });
+        search: query.search,
+      },
+    );
 
     return c.json(result);
   },
@@ -200,9 +224,44 @@ export const taskController = {
   // =========================================================
 
   async createComment(c: Context) {
+    console.log("🚀 [controller:createComment] entered");
+
     const currentUser = c.get("user");
-    const body = await c.req.json();
-    console.log("🚀 ~ body:", body);
+    const contentType = c.req.header("content-type") ?? "";
+    console.log("📦 content-type:", contentType);
+
+    // Multer stores parsed fields/files on the raw Express-style request
+    const rawReq = c.req.raw as unknown as {
+      body?: Record<string, string>;
+      files?:
+        | Array<{
+            filename: string;
+            originalname: string;
+            mimetype: string;
+            size: number;
+          }>
+        | Record<
+            string,
+            Array<{
+              filename: string;
+              originalname: string;
+              mimetype: string;
+              size: number;
+            }>
+          >;
+    };
+
+    const body = rawReq.body ?? {};
+    const rawFiles = rawReq.files;
+
+    const files = Array.isArray(rawFiles)
+      ? rawFiles
+      : rawFiles
+        ? Object.values(rawFiles).flat()
+        : [];
+
+    console.log("📦 body:", body);
+    console.log("📦 files count:", files.length);
 
     const taskId = typeof body.taskId === "string" ? body.taskId : "";
     const content = typeof body.content === "string" ? body.content : "";
@@ -218,15 +277,20 @@ export const taskController = {
       return c.json({ error: "Comment content is required" }, 400);
     }
 
-    // JSON client can't upload files — accept pre-uploaded attachments if sent
-    const attachments = Array.isArray(body.attachments)
-      ? body.attachments.map((a: any) => ({
-          name: String(a.name),
-          url: String(a.url),
-          size: Number(a.size),
-          type: String(a.type),
-        }))
-      : null;
+    // ✅ Build the full URL here
+    const BASE_URL = process.env.BASE_URL ?? "http://localhost:4000";
+
+    const attachments =
+      files.length > 0
+        ? files.map((f) => ({
+            name: f.originalname,
+            url: `${BASE_URL}/uploads/comments/${f.filename}`,
+            size: f.size,
+            type: f.mimetype,
+          }))
+        : null;
+
+    console.log("🔗 attachments to persist:", attachments);
 
     const comment = await taskService.createComment(
       currentUser.tenantId,
