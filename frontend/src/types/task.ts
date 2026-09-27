@@ -1,77 +1,138 @@
-export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'blocked';
-export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+import { z } from "zod";
 
-export interface TaskAttachment {
-  name: string;
-  url: string;
-  size: number;
-  type: string;
-}
+// --- Base Enums ---
+// Matches backend `taskStatusEnum` (db/schema/tasks.schema.ts) exactly.
+// There is NO "todo" status on the backend — a new task is always created
+// with status "in_progress" (hardcoded server-side in taskService.create,
+// since `newTasksSchema` omits `status` on create entirely).
+export const taskStatusSchema = z.enum([
+  "in_progress",
+  "in_review",
+  "done",
+  "blocked",
+]);
 
-export interface TaskComment {
-  id: string;
-  tenantId: string;
-  taskId: string | null;
-  projectId: string | null;
-  userId: string;
-  content: string;
-  parentCommentId: string | null;
-  attachments: TaskAttachment[] | null;
-  createdAt: string;
-  updatedAt: string;
-}
+export const taskPrioritySchema = z.enum([
+  "low",
+  "medium",
+  "high",
+  "urgent",
+]);
 
-export interface Task {
-  id: string;
-  tenantId: string;
-  projectId: string;
-  parentTaskId: string | null;
-  milestoneId: string | null;
-  title: string;
-  description: string | null;
-  status: TaskStatus;
-  priority: TaskPriority;
-  assigneeId: string | null;
-  creatorId: string | null;
-  startDate: string | null;
-  dueDate: string | null;
-  completedAt: string | null;
-  estimatedHours: string | null;
-  actualHours: string | null;
-  sortOrder: number;
-  isBillable: boolean;
-  tags: string[] | null;
-  createdAt: string;
-  updatedAt: string;
-}
+// --- Base Attachments Schema ---
+export const taskAttachmentSchema = z.object({
+  name: z.string(),
+  url: z.string(),
+  size: z.number(),
+  type: z.string(),
+});
 
-export interface CreateTaskInput {
-  projectId: string;
-  parentTaskId?: string;
-  milestoneId?: string;
-  title: string;
-  description?: string;
-  status: TaskStatus;
-  priority: TaskPriority;
-  assigneeId?: string;
-  startDate?: string;
-  dueDate?: string;
-  estimatedHours?: string;
-  actualHours?: string;
-  sortOrder?: number; // 👈 added — was missing, caused the TS error
-  isBillable?: boolean;
-  tags?: string[];
-}
+// --- Tasks Schemas (full row shape — as returned by the backend) ---
+export const tasksSchema = z.object({
+  id: z.string().uuid(),
+  tenantId: z.string().uuid(),
+  projectId: z.string().uuid(),
+  parentTaskId: z.string().uuid().nullable(),
+  milestoneId: z.string().uuid().nullable(),
+  title: z.string().max(500),
+  description: z.string().nullable(),
+  status: taskStatusSchema,
+  priority: taskPrioritySchema,
+  assigneeId: z.string().uuid().nullable(),
+  creatorId: z.string().uuid().nullable(),
+  startDate: z.string().nullable(),
+  dueDate: z.string().nullable(),
+  isCompleted: z.boolean(),
+  // Dates come back over HTTP as JSON-serialized ISO strings, not Date
+  // instances — using z.date() here was a mismatch with what axios actually
+  // hands back.
+  completedAt: z.string().nullable(),
+  estimatedHours: z.string().nullable(),
+  actualHours: z.string().nullable(),
+  sortOrder: z.number().int(),
+  isBillable: z.boolean(),
+  tags: z.array(z.string()).nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
 
-export type UpdateTaskInput = Partial<CreateTaskInput>;
+// --- Create Task Input Schema (what the CLIENT actually sends) ---
+// `status` is intentionally NOT a field here: the backend's `newTasksSchema`
+// omits it on create (taskService.create always forces status:
+// "in_progress"), and `newTasksSchema.partial()` — used for update — has no
+// `status` key either, since `.partial()` only makes existing keys
+// optional, it can't resurrect an omitted one. So a `status` sent to either
+// /tasks/create or /tasks/edit/:id is silently stripped by zod and does
+// nothing. Use useSubmitTask / useMarkTaskDone / useMarkTaskBlocked instead.
+export const createTaskInputSchema = z.object({
+  projectId: z.string().uuid(),
+  parentTaskId: z.string().uuid().optional(),
+  milestoneId: z.string().uuid().optional(),
+  title: z.string().min(1, "Title is required").max(500),
+  description: z.string().optional(),
+  priority: taskPrioritySchema,
+  assigneeId: z.string().uuid().optional(),
+  startDate: z.string().optional(),
+  dueDate: z.string().optional(),
+  // isCompleted is fully derived server-side from status — client never
+  // sends this.
+  estimatedHours: z.string().optional(),
+  actualHours: z.string().optional(),
+  sortOrder: z.number().int().optional(),
+  isBillable: z.boolean().optional(),
+  tags: z.array(z.string()).optional(),
+});
 
-export interface TaskFilters {
-  page?: number;
-  limit?: number;
-  projectId?: string;
-  milestoneId?: string;
-  assigneeId?: string;
-  status?: TaskStatus;
-  priority?: TaskPriority;
-  search?: string;
-}
+// --- Update Task Input Schema ---
+export const updateTaskInputSchema = createTaskInputSchema.partial();
+
+// --- Task Filters Schema ---
+// Includes every query param the backend's taskController.getAll actually
+// reads (parentTaskId was previously missing here).
+export const taskFiltersSchema = z.object({
+  page: z.number().int().positive().optional(),
+  limit: z.number().int().positive().optional(),
+  projectId: z.string().uuid().optional(),
+  milestoneId: z.string().uuid().optional(),
+  parentTaskId: z.string().uuid().optional(),
+  assigneeId: z.string().uuid().optional(),
+  status: taskStatusSchema.optional(),
+  priority: taskPrioritySchema.optional(),
+  search: z.string().optional(),
+});
+
+// --- Task Dependencies Schema ---
+export const taskDependenciesSchema = z.object({
+  id: z.string().uuid(),
+  taskId: z.string().uuid(),
+  dependsOnTaskId: z.string().uuid(),
+  type: z.string().max(20),
+  createdAt: z.string(),
+});
+
+// --- Comments Schema ---
+export const commentsSchema = z.object({
+  id: z.string().uuid(),
+  tenantId: z.string().uuid(),
+  taskId: z.string().uuid().nullable(),
+  projectId: z.string().uuid().nullable(),
+  userId: z.string().uuid(),
+  content: z.string(),
+  parentCommentId: z.string().uuid().nullable(),
+  attachments: z.array(taskAttachmentSchema).nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+// --- Inferred Types ---
+export type TaskStatus = z.infer<typeof taskStatusSchema>;
+export type TaskPriority = z.infer<typeof taskPrioritySchema>;
+export type TaskAttachment = z.infer<typeof taskAttachmentSchema>;
+export type TaskComment = z.infer<typeof commentsSchema>;
+export type Task = z.infer<typeof tasksSchema>;
+export type TaskDependency = z.infer<typeof taskDependenciesSchema>;
+export type CreateTaskInput = z.infer<typeof createTaskInputSchema>;
+export type UpdateTaskInput = z.infer<typeof updateTaskInputSchema>;
+export type TaskFilters = z.infer<typeof taskFiltersSchema>;
+
+

@@ -7,13 +7,13 @@ function formatDate(d?: string | null) {
   return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function formatMoney(amount?: string | null, currency?: string) {
+function formatMoney(amount?: string | null, currency?: string | null) {
   if (!amount) return '—';
   const n = Number(amount);
   return `${currency ?? 'USD'} ${n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
-// 👇 NEW: overall + per-milestone task stats
+// overall + per-milestone task stats
 function getTaskStats(tasks: { isCompleted: boolean }[]) {
   const total = tasks.length;
   const completed = tasks.filter((t) => t.isCompleted).length;
@@ -45,7 +45,7 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
   const sortedMilestones = [...project.milestones].sort((a, b) => a.sortOrder - b.sortOrder);
   const completedCount = sortedMilestones.filter((m) => m.isCompleted).length;
 
-  // 👇 NEW: overall task progress across all milestones
+  // overall task progress across all milestones
   const allTasks = sortedMilestones.flatMap((m) => m.tasks ?? []);
   const overallStats = getTaskStats(allTasks);
 
@@ -88,12 +88,14 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Budget</p>
               <p className="text-sm text-gray-800">
                 {formatMoney(project.budgetAmount, project.currency)}
-                <span className="text-xs text-gray-400 ml-1 capitalize">({project.budgetType.replace('_', ' ')})</span>
+                {project.budgetType && (
+                  <span className="text-xs text-gray-400 ml-1 capitalize">({project.budgetType.replace('_', ' ')})</span>
+                )}
               </p>
             </div>
           </div>
 
-          {/* 👇 NEW: Overall task progress */}
+          {/* Overall task progress */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Task Progress</p>
@@ -130,8 +132,8 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {project.projectMembers.map((m) => (
-                  <span key={m.memberName} className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full">
-                    {m.memberName}
+                  <span key={m.id} className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full">
+                    {m.memberName ?? 'Unnamed member'}
                   </span>
                 ))}
               </div>
@@ -174,7 +176,7 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
                             <p className="text-xs text-gray-500 mt-0.5">{m.description}</p>
                           )}
 
-                          {/* 👇 NEW: per-milestone task progress (only if it has tasks) */}
+                          {/* per-milestone task progress (only if it has tasks) */}
                           {mStats.total > 0 && (
                             <div className="mt-2 flex items-center gap-2">
                               <div className="flex-1">
@@ -230,6 +232,26 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
 //   return `${currency ?? 'USD'} ${n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 // }
 
+// // 👇 NEW: overall + per-milestone task stats
+// function getTaskStats(tasks: { isCompleted: boolean }[]) {
+//   const total = tasks.length;
+//   const completed = tasks.filter((t) => t.isCompleted).length;
+//   const percent = total === 0 ? 0 : Math.round((completed / total) * 100);
+//   return { total, completed, percent };
+// }
+
+// function ProgressBar({ percent, size = 'md' }: { percent: number; size?: 'sm' | 'md' }) {
+//   const height = size === 'sm' ? 'h-1' : 'h-2';
+//   return (
+//     <div className={`w-full rounded-full bg-gray-100 overflow-hidden ${height}`}>
+//       <div
+//         className={`h-full rounded-full transition-all ${percent === 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+//         style={{ width: `${percent}%` }}
+//       />
+//     </div>
+//   );
+// }
+
 // interface Props {
 //   project: Project | null;
 //   onClose: () => void;
@@ -241,6 +263,10 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
 
 //   const sortedMilestones = [...project.milestones].sort((a, b) => a.sortOrder - b.sortOrder);
 //   const completedCount = sortedMilestones.filter((m) => m.isCompleted).length;
+
+//   // 👇 NEW: overall task progress across all milestones
+//   const allTasks = sortedMilestones.flatMap((m) => m.tasks ?? []);
+//   const overallStats = getTaskStats(allTasks);
 
 //   return (
 //     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -286,6 +312,17 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
 //             </div>
 //           </div>
 
+//           {/* 👇 NEW: Overall task progress */}
+//           <div>
+//             <div className="flex items-center justify-between mb-1.5">
+//               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Task Progress</p>
+//               <p className="text-xs text-gray-500">
+//                 {overallStats.completed}/{overallStats.total} tasks · {overallStats.percent}%
+//               </p>
+//             </div>
+//             <ProgressBar percent={overallStats.percent} />
+//           </div>
+
 //           {/* Tags — full list, no truncation */}
 //           <div>
 //             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
@@ -320,7 +357,7 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
 //             )}
 //           </div>
 
-//           {/* Milestones — full detail */}
+//           {/* Milestones — full detail + per-milestone task progress */}
 //           <div>
 //             <div className="flex items-center justify-between mb-2">
 //               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
@@ -335,26 +372,43 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
 //               <p className="text-sm text-gray-400">No milestones yet.</p>
 //             ) : (
 //               <div className="space-y-2">
-//                 {sortedMilestones.map((m) => (
-//                   <div key={m.id ?? m.name} className="flex items-start gap-3 border border-gray-200 rounded-lg p-3">
-//                     <div className={`mt-0.5 h-4 w-4 rounded-full border-2 flex-shrink-0 ${
-//                       m.isCompleted ? 'bg-emerald-500 border-emerald-500' : 'border-gray-300'
-//                     }`} />
-//                     <div className="flex-1 min-w-0">
-//                       <div className="flex items-center justify-between gap-2">
-//                         <p className={`text-sm font-medium ${m.isCompleted ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-//                           {m.name}
-//                         </p>
-//                         {m.dueDate && (
-//                           <span className="text-xs text-gray-400 flex-shrink-0">{formatDate(m.dueDate)}</span>
-//                         )}
+//                 {sortedMilestones.map((m) => {
+//                   const mStats = getTaskStats(m.tasks ?? []);
+//                   return (
+//                     <div key={m.id ?? m.name} className="border border-gray-200 rounded-lg p-3">
+//                       <div className="flex items-start gap-3">
+//                         <div className={`mt-0.5 h-4 w-4 rounded-full border-2 flex-shrink-0 ${
+//                           m.isCompleted ? 'bg-emerald-500 border-emerald-500' : 'border-gray-300'
+//                         }`} />
+//                         <div className="flex-1 min-w-0">
+//                           <div className="flex items-center justify-between gap-2">
+//                             <p className={`text-sm font-medium ${m.isCompleted ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+//                               {m.name}
+//                             </p>
+//                             {m.dueDate && (
+//                               <span className="text-xs text-gray-400 flex-shrink-0">{formatDate(m.dueDate)}</span>
+//                             )}
+//                           </div>
+//                           {m.description && (
+//                             <p className="text-xs text-gray-500 mt-0.5">{m.description}</p>
+//                           )}
+
+//                           {/* 👇 NEW: per-milestone task progress (only if it has tasks) */}
+//                           {mStats.total > 0 && (
+//                             <div className="mt-2 flex items-center gap-2">
+//                               <div className="flex-1">
+//                                 <ProgressBar percent={mStats.percent} size="sm" />
+//                               </div>
+//                               <span className="text-xs text-gray-400 flex-shrink-0">
+//                                 {mStats.completed}/{mStats.total} tasks
+//                               </span>
+//                             </div>
+//                           )}
+//                         </div>
 //                       </div>
-//                       {m.description && (
-//                         <p className="text-xs text-gray-500 mt-0.5">{m.description}</p>
-//                       )}
 //                     </div>
-//                   </div>
-//                 ))}
+//                   );
+//                 })}
 //               </div>
 //             )}
 //           </div>
@@ -377,3 +431,6 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
 //     </div>
 //   );
 // }
+
+
+

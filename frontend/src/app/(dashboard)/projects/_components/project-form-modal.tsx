@@ -1,60 +1,75 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useCreateProject, useUpdateProject } from '@/hooks/use-projects';
 import { useClients } from '@/hooks/use-clients';
 // Assumed hook, same pattern as useClients — adjust the import if your users hook differs.
 
-import type { Project, ProjectStatus, BudgetType, DefaultView, CreateMilestoneInput } from '@/types/project';
+import type {
+  Project,
+  ProjectStatus,
+  BudgetType,
+  DefaultView,
+  CreateMilestoneInput,
+} from '@/types/project';
 import { useUsers } from '@/hooks/use-auth';
 
+// A member row in the form is either an existing user (picked from the
+// dropdown) or a brand-new user to be created inline — mirrors the
+// isNewMember branch of CreateProjectMemberInput on the backend.
+type MemberSelection =
+  | { kind: 'existing'; userId: string }
+  | { kind: 'new'; tempId: string; name: string; email: string; password: string };
+
 interface FormState {
-  clientId: string;
+  clientId: string; // '' means "no client" — sent as undefined on submit
   name: string;
   description: string;
   status: ProjectStatus;
   defaultView: DefaultView;
   startDate: string;
   endDate: string;
-  budgetType: BudgetType;
+  budgetType: BudgetType | '';
   budgetAmount: string;
   budgetHours: string;
   currency: string;
   isBillable: boolean;
   isTemplate: boolean;
-  ownerId: string;
+  ownerId: string; // '' means "no owner" — sent as undefined on submit
   color: string;
   tags: string[];
-  memberIds: string[];
+  members: MemberSelection[];
   milestones: CreateMilestoneInput[];
 }
 
+const EMPTY_NEW_MEMBER = { name: '', email: '', password: '' };
+
 const EMPTY: FormState = {
-  clientId: '', name: '', description: '', status: 'active', defaultView: 'board',
+  clientId: '', name: '', description: '', status: 'active', defaultView: 'list',
   startDate: '', endDate: '', budgetType: 'fixed_fee', budgetAmount: '', budgetHours: '',
   currency: 'USD', isBillable: true, isTemplate: false, ownerId: '', color: '#4F46E5',
-  tags: [], memberIds: [], milestones: [],
+  tags: [], members: [], milestones: [],
 };
 
 function projectToForm(p: Project): FormState {
   return {
-    clientId: p.clientId,
+    clientId: p.clientId ?? '',
     name: p.name,
     description: p.description ?? '',
     status: p.status,
     defaultView: p.defaultView,
     startDate: p.startDate?.slice(0, 10) ?? '',
     endDate: p.endDate?.slice(0, 10) ?? '',
-    budgetType: p.budgetType,
+    budgetType: p.budgetType ?? '',
     budgetAmount: p.budgetAmount ?? '',
     budgetHours: p.budgetHours ?? '',
-    currency: p.currency,
+    currency: p.currency ?? 'USD',
     isBillable: p.isBillable,
     isTemplate: p.isTemplate,
-    ownerId: p.ownerId,
+    ownerId: p.ownerId ?? '',
     color: p.color ?? '#4F46E5',
     tags: p.tags ?? [],
-    memberIds: p.projectMembers.map((m) => m.userId),
+    members: p.projectMembers.map((m) => ({ kind: 'existing' as const, userId: m.userId })),
     milestones: p.milestones
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((m) => ({
@@ -97,12 +112,34 @@ export function ProjectFormModal({ open, project, onClose }: Props) {
   const [tagInput, setTagInput] = useState('')
   const [error, setError] = useState('');
 
+  // Member picker state
+  const [memberMenuOpen, setMemberMenuOpen] = useState(false);
+  const [addMemberOpen, setAddMemberOpen] = useState(false);
+  const [newMember, setNewMember] = useState(EMPTY_NEW_MEMBER);
+  const [showNewMemberPassword, setShowNewMemberPassword] = useState(false);
+  const memberMenuRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!open) return;
     setForm(project ? projectToForm(project) : EMPTY);
     setTagInput('');
     setError('');
+    setMemberMenuOpen(false);
+    setAddMemberOpen(false);
+    setNewMember(EMPTY_NEW_MEMBER);
+    setShowNewMemberPassword(false);
   }, [open, project]);
+
+  // Close the member dropdown when clicking outside it.
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (memberMenuRef.current && !memberMenuRef.current.contains(e.target as Node)) {
+        setMemberMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const set = (patch: Partial<FormState>) => setForm((p) => ({ ...p, ...patch }));
   const isEditing = !!project;
@@ -114,12 +151,48 @@ export function ProjectFormModal({ open, project, onClose }: Props) {
     setTagInput('');
   };
 
-  const toggleMember = (userId: string) => {
+  const isExistingSelected = (userId: string) =>
+    form.members.some((m) => m.kind === 'existing' && m.userId === userId);
+
+  const toggleExistingMember = (userId: string) => {
     set({
-      memberIds: form.memberIds.includes(userId)
-        ? form.memberIds.filter((id) => id !== userId)
-        : [...form.memberIds, userId],
+      members: isExistingSelected(userId)
+        ? form.members.filter((m) => !(m.kind === 'existing' && m.userId === userId))
+        : [...form.members, { kind: 'existing', userId }],
     });
+  };
+
+  const removeMember = (target: MemberSelection) => {
+    set({
+      members: form.members.filter((m) =>
+        target.kind === 'existing'
+          ? !(m.kind === 'existing' && m.userId === target.userId)
+          : !(m.kind === 'new' && m.tempId === target.tempId)
+      ),
+    });
+  };
+
+  const handleAddNewMember = () => {
+    if (!newMember.name.trim() || !newMember.email.trim() || !newMember.password.trim()) {
+      setError('Name, email and password are required to add a new member.');
+      return;
+    }
+    set({
+      members: [
+        ...form.members,
+        {
+          kind: 'new',
+          tempId: crypto.randomUUID(),
+          name: newMember.name.trim(),
+          email: newMember.email.trim(),
+          password: newMember.password,
+        },
+      ],
+    });
+    setNewMember(EMPTY_NEW_MEMBER);
+    setAddMemberOpen(false);
+    setShowNewMemberPassword(false);
+    setError('');
   };
 
   const addMilestone = () => {
@@ -153,6 +226,9 @@ export function ProjectFormModal({ open, project, onClose }: Props) {
       : form.tags;
 
     if (!form.name.trim()) { setError('Project name is required.'); return; }
+    // clientId/ownerId are nullable on the backend, but we still require
+    // them in this form as a business rule (a project needs an owner and
+    // a client in practice). Relax these two checks if that's not desired.
     if (!form.clientId) { setError('Select a client.'); return; }
     if (!form.ownerId) { setError('Select an owner.'); return; }
 
@@ -167,23 +243,27 @@ export function ProjectFormModal({ open, project, onClose }: Props) {
     }
 
     const base = {
-      clientId: form.clientId,
+      clientId: form.clientId || undefined,
       name: form.name.trim(),
       description: form.description.trim() || undefined,
       status: form.status,
       defaultView: form.defaultView,
       startDate: form.startDate || undefined,
       endDate: form.endDate || undefined,
-      budgetType: form.budgetType,
+      budgetType: form.budgetType || undefined,
       budgetAmount: form.budgetAmount || undefined,
       budgetHours: form.budgetHours || undefined,
       currency: form.currency,
       isBillable: form.isBillable,
       isTemplate: form.isTemplate,
-      ownerId: form.ownerId,
+      ownerId: form.ownerId || undefined,
       color: form.color,
       tags: finalTags, // <- was form.tags
-      projectMembers: form.memberIds.map((userId) => ({ userId })),
+      projectMembers: form.members.map((m) =>
+        m.kind === 'existing'
+          ? { userId: m.userId }
+          : { isNewMember: true as const, name: m.name, email: m.email, password: m.password }
+      ),
       milestones: form.milestones
         .filter((m) => m.name.trim())
         .map((m, i) => ({ ...m, sortOrder: i + 1 })),
@@ -195,8 +275,8 @@ export function ProjectFormModal({ open, project, onClose }: Props) {
       } else {
         await createProject.mutateAsync(base);
       }
-      // keep tags/milestones in sync with what was actually submitted,
-      // in case onClose() doesn't unmount immediately
+      // keep tags in sync with what was actually submitted, in case
+      // onClose() doesn't unmount immediately
       set({ tags: finalTags });
       setTagInput('');
       onClose();
@@ -265,13 +345,15 @@ export function ProjectFormModal({ open, project, onClose }: Props) {
                     <option value="on_hold">On hold</option>
                     <option value="completed">Completed</option>
                     <option value="archived">Archived</option>
+                    <option value="cancelled">Cancelled</option>
                   </select>
                 </Field>
                 <Field label="Default View">
                   <select value={form.defaultView} onChange={(e) => set({ defaultView: e.target.value as DefaultView })} className={selectCls}>
-                    <option value="board">Board</option>
                     <option value="list">List</option>
-                    <option value="calendar">Calendar</option>
+                    <option value="table">Table</option>
+                    <option value="board">Board</option>
+                    <option value="gantt">Gantt</option>
                   </select>
                 </Field>
                 <Field label="Color">
@@ -298,11 +380,13 @@ export function ProjectFormModal({ open, project, onClose }: Props) {
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Budget</h3>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Budget Type">
-                <select value={form.budgetType} onChange={(e) => set({ budgetType: e.target.value as BudgetType })} className={selectCls}>
+                <select value={form.budgetType} onChange={(e) => set({ budgetType: e.target.value as BudgetType | '' })} className={selectCls}>
+                  <option value="">No budget type</option>
+                  <option value="time">Time</option>
+                  <option value="financial">Financial</option>
                   <option value="fixed_fee">Fixed fee</option>
-                  <option value="hourly">Hourly</option>
-                  <option value="retainer">Retainer</option>
-                  <option value="non_billable">Non-billable</option>
+                  <option value="task_list">Task list</option>
+                  <option value="expense">Expense</option>
                 </select>
               </Field>
               <Field label="Currency">
@@ -354,15 +438,136 @@ export function ProjectFormModal({ open, project, onClose }: Props) {
 
           <section>
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Members</h3>
-            <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border border-gray-200 rounded-lg p-3">
-              {users.map((u) => (
-                <label key={u.id} className="flex items-center gap-2 text-sm text-gray-700">
-                  <input type="checkbox" checked={form.memberIds.includes(u.id)} onChange={() => toggleMember(u.id)}
-                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                  {u.name}
-                </label>
-              ))}
+
+            <div className="relative" ref={memberMenuRef}>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMemberMenuOpen((o) => !o)}
+                  className={selectCls + ' flex items-center justify-between text-left'}
+                >
+                  <span className={form.members.length === 0 ? 'text-gray-400' : ''}>
+                    {form.members.length === 0
+                      ? 'Select members…'
+                      : `${form.members.length} member${form.members.length !== 1 ? 's' : ''} selected`}
+                  </span>
+                  <svg className={`h-4 w-4 text-gray-400 transition-transform ${memberMenuOpen ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAddMemberOpen((o) => !o)}
+                  title="Add a brand new member"
+                  className="flex-shrink-0 h-[38px] w-[38px] flex items-center justify-center rounded-lg border border-gray-300 text-indigo-600 hover:bg-indigo-50 transition-colors"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+
+              {memberMenuOpen && (
+                <div className="absolute z-20 mt-1 w-full max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg p-2 space-y-0.5">
+                  {users.length === 0 ? (
+                    <p className="text-sm text-gray-400 px-2 py-1.5">No users yet.</p>
+                  ) : (
+                    users.map((u) => (
+                      <label key={u.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 text-sm text-gray-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isExistingSelected(u.id)}
+                          onChange={() => toggleExistingMember(u.id)}
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        {u.name}
+                      </label>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
+
+            {addMemberOpen && (
+              <div className="mt-2 border border-gray-200 rounded-lg p-3 space-y-2 bg-gray-50">
+                <p className="text-xs font-medium text-gray-500">Invite a brand new member</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <input
+                    value={newMember.name}
+                    onChange={(e) => setNewMember((p) => ({ ...p, name: e.target.value }))}
+                    placeholder="Name"
+                    className={inputCls}
+                  />
+                  <input
+                    type="email"
+                    value={newMember.email}
+                    onChange={(e) => setNewMember((p) => ({ ...p, email: e.target.value }))}
+                    placeholder="Email"
+                    className={inputCls}
+                  />
+                  <div className="relative">
+                    <input
+                      type={showNewMemberPassword ? 'text' : 'password'}
+                      value={newMember.password}
+                      onChange={(e) => setNewMember((p) => ({ ...p, password: e.target.value }))}
+                      placeholder="Password"
+                      className={inputCls + ' pr-9'}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewMemberPassword((s) => !s)}
+                      tabIndex={-1}
+                      title={showNewMemberPassword ? 'Hide password' : 'Show password'}
+                      className="absolute inset-y-0 right-0 flex items-center px-2.5 text-gray-400 hover:text-gray-600"
+                    >
+                      {showNewMemberPassword ? (
+                        <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M3.28 2.22a.75.75 0 00-1.06 1.06l14.5 14.5a.75.75 0 101.06-1.06l-1.745-1.745a10.029 10.029 0 003.3-4.38 1.651 1.651 0 000-1.185A10.004 10.004 0 009.999 3a9.956 9.956 0 00-4.744 1.194L3.28 2.22zM7.752 6.69l1.092 1.092a2.5 2.5 0 013.374 3.373l1.091 1.092a4 4 0 00-5.557-5.557z" clipRule="evenodd" />
+                          <path d="M10.748 13.93l2.523 2.523a9.987 9.987 0 01-3.27.547c-4.258 0-7.894-2.66-9.337-6.41a1.651 1.651 0 010-1.186A10.007 10.007 0 012.839 6.02L6.07 9.252a4 4 0 004.678 4.678z" />
+                        </svg>
+                      ) : (
+                        <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                          <path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" />
+                          <path fillRule="evenodd" d="M.664 10.59a1.651 1.651 0 010-1.186A10.004 10.004 0 0110 3c4.257 0 7.893 2.66 9.336 6.41.147.381.147.804 0 1.186A10.004 10.004 0 0110 17c-4.257 0-7.893-2.66-9.336-6.41zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => { setAddMemberOpen(false); setNewMember(EMPTY_NEW_MEMBER); setShowNewMemberPassword(false); }}
+                    className="text-xs font-medium text-gray-500 hover:text-gray-700"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddNewMember}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                  >
+                    Add member
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {form.members.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {form.members.map((m) => (
+                  <span
+                    key={m.kind === 'existing' ? m.userId : m.tempId}
+                    className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs px-2.5 py-1 rounded-full"
+                  >
+                    {m.kind === 'existing'
+                      ? users.find((u) => u.id === m.userId)?.name ?? 'Member'
+                      : `${m.name} (new)`}
+                    <button type="button" onClick={() => removeMember(m)} className="hover:text-indigo-900">×</button>
+                  </span>
+                ))}
+              </div>
+            )}
           </section>
 
           <section>
@@ -375,29 +580,40 @@ export function ProjectFormModal({ open, project, onClose }: Props) {
             <div className="space-y-3">
               {form.milestones.map((m, i) => (
                 <div key={i} className="border border-gray-200 rounded-lg p-3 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <input
-                      value={m.name}
-                      onChange={(e) => updateMilestone(i, { name: e.target.value })}
-                      placeholder={`Milestone ${i + 1} name`}
-                      className={inputCls + ' flex-1'}
-                    />
-                    <input
-                      type="date"
-                      value={m.dueDate ?? ''}
-                      onChange={(e) => updateMilestone(i, { dueDate: e.target.value })}
-                      className={inputCls + ' w-40'}
-                    />
-                    <button type="button" onClick={() => removeMilestone(i)} className="text-red-500 hover:text-red-700 px-1">
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1 min-w-0">
+                      <label className="block text-xs text-gray-500 mb-1">
+                        Milestone name<span className="text-red-500 ml-0.5">*</span>
+                      </label>
+                      <input
+                        value={m.name}
+                        onChange={(e) => updateMilestone(i, { name: e.target.value })}
+                        placeholder={`Milestone ${i + 1} name`}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div className="w-40 flex-shrink-0">
+                      <label className="block text-xs text-gray-500 mb-1">Due date</label>
+                      <input
+                        type="date"
+                        value={m.dueDate ?? ''}
+                        onChange={(e) => updateMilestone(i, { dueDate: e.target.value })}
+                        className={inputCls}
+                      />
+                    </div>
+                    <button type="button" onClick={() => removeMilestone(i)} className="text-red-500 hover:text-red-700 px-1 pb-2 flex-shrink-0">
                       ×
                     </button>
                   </div>
-                  <input
-                    value={m.description ?? ''}
-                    onChange={(e) => updateMilestone(i, { description: e.target.value })}
-                    placeholder="Description (optional)"
-                    className={inputCls}
-                  />
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Description</label>
+                    <input
+                      value={m.description ?? ''}
+                      onChange={(e) => updateMilestone(i, { description: e.target.value })}
+                      placeholder="Description (optional)"
+                      className={inputCls}
+                    />
+                  </div>
                 </div>
               ))}
               {form.milestones.length === 0 && (
@@ -421,5 +637,4 @@ export function ProjectFormModal({ open, project, onClose }: Props) {
     </div>
   );
 }
-
 
