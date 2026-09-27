@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 import type {
   Task,
   CreateTaskInput,
@@ -9,13 +9,17 @@ import type {
   TaskFilters,
   TaskComment,
   TaskAttachment,
-} from '@/types/task';
+} from "@/types/task";
 
 // NOTE: backend /tasks/getAll returns a plain array (no total/totalPages) —
 // same shape quirk as /projects/getAll's non-empty case.
 function normalizeTasksResponse(raw: unknown): Task[] {
   if (Array.isArray(raw)) return raw;
-  if (raw && typeof raw === 'object' && Array.isArray((raw as { data?: unknown }).data)) {
+  if (
+    raw &&
+    typeof raw === "object" &&
+    Array.isArray((raw as { data?: unknown }).data)
+  ) {
     return (raw as { data: Task[] }).data;
   }
   return [];
@@ -23,9 +27,9 @@ function normalizeTasksResponse(raw: unknown): Task[] {
 
 export function useTasks(filters: TaskFilters = {}) {
   return useQuery<Task[]>({
-    queryKey: ['tasks', filters],
+    queryKey: ["tasks", filters],
     queryFn: async () => {
-      const { data } = await api.get('/tasks/getAll', { params: filters });
+      const { data } = await api.get("/tasks/getAll", { params: filters });
       return normalizeTasksResponse(data);
     },
   });
@@ -33,7 +37,7 @@ export function useTasks(filters: TaskFilters = {}) {
 
 export function useTask(id: string | null) {
   return useQuery<Task>({
-    queryKey: ['task', id],
+    queryKey: ["task", id],
     queryFn: async () => {
       const { data } = await api.get(`/tasks/getById/${id}`);
       return data;
@@ -73,10 +77,10 @@ export function useCreateTask() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: CreateTaskInput) => {
-      const { data } = await api.post('/tasks/create', toTaskPayload(input));
+      const { data } = await api.post("/tasks/create", toTaskPayload(input));
       return data as Task;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['tasks'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
   });
 }
 
@@ -88,8 +92,8 @@ export function useUpdateTask() {
       return data as Task;
     },
     onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ['tasks'] });
-      qc.invalidateQueries({ queryKey: ['task', vars.id] });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["task", vars.id] });
     },
   });
 }
@@ -100,7 +104,7 @@ export function useDeleteTask() {
     mutationFn: async (id: string) => {
       await api.delete(`/tasks/delete/${id}`);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['tasks'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
   });
 }
 
@@ -112,7 +116,7 @@ export function useDeleteTask() {
 // `done` also sets isCompleted + completedAt server-side; `submit` and
 // `blocked` clear completedAt (see taskService.changeStatus).
 
-function useStatusTransition(path: 'submit' | 'done' | 'blocked') {
+function useStatusTransition(path: "submit" | "done" | "blocked") {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
@@ -120,26 +124,26 @@ function useStatusTransition(path: 'submit' | 'done' | 'blocked') {
       return data as Task;
     },
     onSuccess: (_data, id) => {
-      qc.invalidateQueries({ queryKey: ['tasks'] });
-      qc.invalidateQueries({ queryKey: ['task', id] });
-      qc.invalidateQueries({ queryKey: ['tasks-in-review'] });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["task", id] });
+      qc.invalidateQueries({ queryKey: ["tasks-in-review"] });
     },
   });
 }
 
 /** in_progress -> in_review */
 export function useSubmitTask() {
-  return useStatusTransition('submit');
+  return useStatusTransition("submit");
 }
 
 /** any -> done */
 export function useMarkTaskDone() {
-  return useStatusTransition('done');
+  return useStatusTransition("done");
 }
 
 /** any -> blocked */
 export function useMarkTaskBlocked() {
-  return useStatusTransition('blocked');
+  return useStatusTransition("blocked");
 }
 
 // ---- Review queue ----
@@ -158,11 +162,11 @@ export interface PaginatedTasks {
   };
 }
 
-export function useTasksInReview(filters: Omit<TaskFilters, 'status'> = {}) {
+export function useTasksInReview(filters: Omit<TaskFilters, "status"> = {}) {
   return useQuery<PaginatedTasks>({
-    queryKey: ['tasks-in-review', filters],
+    queryKey: ["tasks-in-review", filters],
     queryFn: async () => {
-      const { data } = await api.get('/tasks/getInReview', { params: filters });
+      const { data } = await api.get("/tasks/getInReview", { params: filters });
       return data as PaginatedTasks;
     },
   });
@@ -172,7 +176,7 @@ export function useTasksInReview(filters: Omit<TaskFilters, 'status'> = {}) {
 
 export function useTaskComments(taskId: string | null) {
   return useQuery<TaskComment[]>({
-    queryKey: ['task-comments', taskId],
+    queryKey: ["task-comments", taskId],
     queryFn: async () => {
       const { data } = await api.get(`/tasks/comments/getAll/${taskId}`);
       return data;
@@ -183,23 +187,36 @@ export function useTaskComments(taskId: string | null) {
 
 export function useCreateComment(taskId: string) {
   const qc = useQueryClient();
+
   return useMutation({
     mutationFn: async ({
       content,
-      attachments,
+      files,
     }: {
       content: string;
-      attachments?: TaskAttachment[];
+      files?: File[];
     }) => {
-      const { data } = await api.post('/tasks/comments/create', {
-        taskId,
-        content,
-        parentCommentId: null,
-        attachments: attachments && attachments.length > 0 ? attachments : null,
+      const form = new FormData();
+
+      // ⚠️ Text fields FIRST — multer reads them in order
+      form.append("taskId", taskId);
+      form.append("content", content);
+      // form.append('parentCommentId', ''); // optional
+
+      // Files AFTER
+      files?.forEach((f) => form.append("attachments", f));
+
+      const { data } = await api.post("/tasks/comments/create", form, {
+        // Let the browser set Content-Type with the correct boundary
+        headers: { "Content-Type": undefined as unknown as string },
       });
+
       return data as TaskComment;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['task-comments', taskId] }),
+
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["task-comments", taskId] });
+    },
   });
 }
 
@@ -209,12 +226,10 @@ export function useDeleteComment(taskId: string) {
     mutationFn: async (commentId: string) => {
       await api.delete(`/tasks/comments/delete/${commentId}`);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['task-comments', taskId] }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["task-comments", taskId] }),
   });
 }
-
-
-
 
 // 'use client';
 
@@ -403,4 +418,3 @@ export function useDeleteComment(taskId: string) {
 //     onSuccess: () => qc.invalidateQueries({ queryKey: ['task-comments', taskId] }),
 //   });
 // }
-
