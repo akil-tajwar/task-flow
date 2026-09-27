@@ -1,11 +1,6 @@
 import { and, desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "../db/index";
-import {
-  tasks,
-  taskDependencies,
-  comments,
-  projects,
-} from "../db/schema/index.schema";
+import { tasks, taskDependencies, comments, notifications } from "../db/schema/index.schema";
 
 import type { NewTask, Comment } from "../validators/tasks.validator";
 
@@ -15,11 +10,15 @@ export const taskService = {
   // =========================================================
 
   async create(tenantId: string, input: NewTask) {
+    console.log("🚀 [service] entered", { tenantId, input });
+
     const [task] = await db
       .insert(tasks)
       .values({
         ...input,
         tenantId,
+        isCompleted: false,
+        status: "in_progress",
       })
       .returning();
 
@@ -35,7 +34,7 @@ export const taskService = {
       milestoneId?: string;
       parentTaskId?: string;
       assigneeId?: string;
-      status?: "todo" | "in_progress" | "in_review" | "done" | "blocked";
+      status?: "in_progress" | "in_review" | "done" | "blocked";
       priority?: "low" | "medium" | "high" | "urgent";
       search?: string;
     },
@@ -149,6 +148,193 @@ export const taskService = {
 
     return {
       message: "Task deleted",
+    };
+  },
+
+  // ─────────────────────────────────────────────────────────────
+  // Add inside the taskService object (after `delete`, before dependencies)
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * Internal helper — moves a task to the given status.
+   * Handles isCompleted / completedAt for the "done" transition.
+   * `notify` controls whether an assignee notification is inserted.
+   */
+  async changeStatus(
+    tenantId: string,
+    id: string,
+    status: "in_progress" | "in_review" | "done" | "blocked",
+    notify: {
+      type: "task completed" | "task blocked";
+      title: string;
+      body: string;
+      metadata: Record<string, unknown>;
+    } | null,
+  ) {
+    const existing = await db.query.tasks.findFirst({
+      where: and(eq(tasks.id, id), eq(tasks.tenantId, tenantId)),
+    });
+
+    if (!existing) {
+      throw new Error("Task not found");
+    }
+
+    return db.transaction(async (tx) => {
+      const isDone = status === "done";
+
+      const [task] = await tx
+        .update(tasks)
+        .set({
+          status,
+          isCompleted: isDone,
+          completedAt: isDone ? new Date() : null,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(tasks.id, id), eq(tasks.tenantId, tenantId)))
+        .returning();
+
+      if (!task) {
+        throw new Error("Task not found");
+      }
+
+      /**
+       * Notify the assignee when a task is completed or blocked.
+       * Always fires — even if the current user IS the assignee
+       * (per requirements).
+       */
+      if (notify && task.assigneeId) {
+        await tx.insert(notifications).values({
+          tenantId: task.tenantId,
+          userId: task.assigneeId,
+          type: notify.type,
+          title: notify.title,
+          body: notify.body,
+          linkUrl: `${process.env.FRONTEND_URL}/tasks/${task.id}`,
+          metadata: {
+            taskId: task.id,
+            projectId: task.projectId,
+            milestoneId: task.milestoneId,
+            status: task.status,
+            ...notify.metadata,
+          },
+          isRead: false,
+          readAt: null,
+        });
+      }
+
+      return task;
+    });
+  },
+
+  async submitForReview(tenantId: string, id: string) {
+    return this.changeStatus(tenantId, id, "in_review", null);
+  },
+
+  async markDone(tenantId: string, id: string) {
+    const existing = await db.query.tasks.findFirst({
+      where: and(eq(tasks.id, id), eq(tasks.tenantId, tenantId)),
+    });
+
+    if (!existing) {
+      throw new Error("Task not found");
+    }
+
+    return this.changeStatus(tenantId, id, "done", {
+      type: "task completed",
+      title: `Task completed: "${existing.title}"`,
+      body: `The task "${existing.title}" has been marked as done.`,
+      metadata: {
+        taskTitle: existing.title,
+        previousStatus: existing.status,
+      },
+    });
+  },
+
+  async markBlocked(tenantId: string, id: string) {
+    const existing = await db.query.tasks.findFirst({
+      where: and(eq(tasks.id, id), eq(tasks.tenantId, tenantId)),
+    });
+
+    if (!existing) {
+      throw new Error("Task not found");
+    }
+
+    return this.changeStatus(tenantId, id, "blocked", {
+      type: "task blocked",
+      title: `Task blocked: "${existing.title}"`,
+      body: `The task "${existing.title}" has been blocked and needs attention.`,
+      metadata: {
+        taskTitle: existing.title,
+        previousStatus: existing.status,
+      },
+    });
+  },
+
+  async getInReview(
+    tenantId: string,
+    query: {
+      page?: number;
+      limit?: number;
+      projectId?: string;
+      milestoneId?: string;
+      parentTaskId?: string;
+      assigneeId?: string;
+      priority?: "low" | "medium" | "high" | "urgent";
+      search?: string;
+    },
+  ) {
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.min(100, Math.max(1, query.limit ?? 20));
+    const offset = (page - 1) * limit;
+
+    const conditions = [
+      eq(tasks.tenantId, tenantId),
+      eq(tasks.status, "in_review"),
+    ];
+
+    if (query.projectId) conditions.push(eq(tasks.projectId, query.projectId));
+    if (query.milestoneId)
+      conditions.push(eq(tasks.milestoneId, query.milestoneId));
+    if (query.parentTaskId)
+      conditions.push(eq(tasks.parentTaskId, query.parentTaskId));
+    if (query.assigneeId)
+      conditions.push(eq(tasks.assigneeId, query.assigneeId));
+    if (query.priority) conditions.push(eq(tasks.priority, query.priority));
+    if (query.search) {
+      conditions.push(
+        or(
+          ilike(tasks.title, `%${query.search}%`),
+          ilike(tasks.description, `%${query.search}%`),
+        )!,
+      );
+    }
+
+    const where = and(...conditions);
+
+    const [rows, [countRow]] = await Promise.all([
+      db.query.tasks.findMany({
+        where,
+        limit,
+        offset,
+        orderBy: [desc(tasks.createdAt)],
+      }),
+
+      db
+        .select({
+          total: db.$count(tasks, where),
+        })
+        .from(tasks)
+        .where(where),
+    ]);
+
+    return {
+      data: rows,
+      pagination: {
+        page,
+        limit,
+        total: countRow?.total ?? 0,
+        totalPages: Math.ceil((countRow?.total ?? 0) / limit),
+      },
     };
   },
 

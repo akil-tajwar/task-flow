@@ -8,12 +8,13 @@ export const tasksSchema = z.object({
   milestoneId: z.string().uuid().nullable(),
   title: z.string().max(500),
   description: z.string().nullable(),
-  status: z.enum(["todo", "in_progress", "in_review", "done", "blocked"]),
+  status: z.enum(["in_progress", "in_review", "done", "blocked"]),
   priority: z.enum(["low", "medium", "high", "urgent"]),
   assigneeId: z.string().uuid().nullable(),
   creatorId: z.string().uuid().nullable(),
   startDate: z.string().nullable(),
   dueDate: z.string().nullable(),
+  isCompleted: z.boolean().default(false),
   completedAt: z.date().nullable(),
   estimatedHours: z.string().nullable(),
   actualHours: z.string().nullable(),
@@ -24,11 +25,20 @@ export const tasksSchema = z.object({
   updatedAt: z.date(),
 });
 
-export const newTasksSchema = tasksSchema.omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
+export const newTasksSchema = tasksSchema
+  .omit({
+    id: true,
+    tenantId: true,
+    status: true,
+    isCompleted: true,
+    completedAt: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .extend({
+    creatorId: z.string().uuid().nullable().optional(),
+    completedAt: z.date().nullable().optional(),
+  });
 
 export const taskDependenciesSchema = z.object({
   id: z.string().uuid(),
