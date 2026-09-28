@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { Suspense, useEffect, useState, useMemo } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useTasks, useDeleteTask } from '@/hooks/use-tasks';
 import { useProjects } from '@/hooks/use-projects';
 import { useMe } from '@/hooks/use-auth';
@@ -9,7 +10,11 @@ import { TaskFormModal } from './_components/task-form-modal';
 import { TaskDetailModal } from './_components/task-detail-modal';
 import type { Task } from '@/types/task';
 
-export default function TasksPage() {
+function TasksPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const taskIdParam = searchParams.get('taskId');
+
   const { data: me } = useMe();
   const { data: projects = [] } = useProjects();
   const { data: tasks = [], isLoading, isError } = useTasks();
@@ -26,6 +31,15 @@ export default function TasksPage() {
     projects.forEach((p) => p.projectMembers.forEach((m) => { map[m.userId] = m.memberName ?? m.userId; }));
     return map;
   }, [projects]);
+
+  // Opened from a notification: /tasks?taskId=<id> → open the detail modal,
+  // then strip the param so a refresh / back navigation doesn't reopen it.
+  useEffect(() => {
+    if (!taskIdParam || isLoading) return;
+    const target = tasks.find((t) => t.id === taskIdParam);
+    if (target) setViewing(target);
+    router.replace('/tasks', { scroll: false });
+  }, [taskIdParam, tasks, isLoading, router]);
 
   const handleDelete = async () => {
     if (!confirmDelete) return;
@@ -97,6 +111,15 @@ export default function TasksPage() {
     </div>
   );
 }
+
+export default function TasksPage() {
+  return (
+    <Suspense fallback={null}>
+      <TasksPageContent />
+    </Suspense>
+  );
+}
+
 
 
 // 'use client';
@@ -198,3 +221,4 @@ export default function TasksPage() {
 //     </div>
 //   );
 // }
+
