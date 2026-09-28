@@ -44,6 +44,9 @@ export function TaskDetailModal({
   const [previews, setPreviews] = useState<Record<number, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ✅ Comment pending delete confirmation
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+
   const { data: comments = [], isLoading } = useTaskComments(task?.id ?? null);
   const createComment = useCreateComment(task?.id ?? "");
   const deleteComment = useDeleteComment(task?.id ?? "");
@@ -91,6 +94,15 @@ export function TaskDetailModal({
     setPendingFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
+
+  // ✅ Confirm delete flow
+  const confirmDelete = () => {
+    if (!deleteTargetId) return;
+    deleteComment.mutate(deleteTargetId);
+    setDeleteTargetId(null);
+  };
+
+  const cancelDelete = () => setDeleteTargetId(null);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -175,6 +187,9 @@ export function TaskDetailModal({
                     className="flex items-start justify-between gap-3 border border-gray-100 rounded-lg p-3 bg-gray-50"
                   >
                     <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-gray-700 mb-1">
+                        {assigneeNameById[c.userId] ?? "Unknown user"}
+                      </p>
                       {c.content && (
                         <p className="text-sm text-gray-800 whitespace-pre-wrap">
                           {c.content}
@@ -212,7 +227,7 @@ export function TaskDetailModal({
                     </div>
                     {c.userId === currentUserId && (
                       <button
-                        onClick={() => deleteComment.mutate(c.id)}
+                        onClick={() => setDeleteTargetId(c.id)}
                         className="text-xs text-red-500 hover:text-red-700 flex-shrink-0"
                       >
                         Delete
@@ -313,6 +328,48 @@ export function TaskDetailModal({
           </button>
         </div>
       </div>
+
+      {/* ✅ Delete confirmation dialog */}
+      {deleteTargetId && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/40"
+            onClick={cancelDelete}
+          />
+          <div className="relative z-10 w-full max-w-sm bg-white rounded-xl shadow-2xl p-6">
+            <h3 className="text-base font-semibold text-gray-900">
+              Delete comment?
+            </h3>
+            <p className="mt-2 text-sm text-gray-500">
+              This action cannot be undone. Are you sure you want to delete
+              this comment?
+            </p>
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={cancelDelete}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={deleteComment.isPending}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteComment.isPending ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+
+
+
+
+
