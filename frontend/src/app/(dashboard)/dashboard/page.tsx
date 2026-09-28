@@ -540,13 +540,13 @@ export default function DashboardPage() {
             {now.toLocaleDateString('en', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
           </p>
         </div>
-        <Link href="/sales/invoices/new"
+        {/* <Link href="/sales/invoices/new"
           className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition-colors">
           <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
           </svg>
           New Sale
-        </Link>
+        </Link> */}
       </div>
 
       {isAdmin ? <AdminDashboard /> : <UserDashboard />}
