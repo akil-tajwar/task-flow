@@ -7,8 +7,8 @@ import {
   useUnreadNotificationCount,
   useMarkNotificationRead,
   useMarkAllNotificationsRead,
-} from "@/hooks/use-notifications";
-import { Notification } from "@/types/notifications";
+} from '@/hooks/use-notifications';
+import { Notification } from '@/types/notifications';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -43,50 +43,36 @@ function typeDot(type: string) {
 function pathFromLinkUrl(linkUrl?: string | null): string | null {
   if (!linkUrl) return null;
   try {
-    return new URL(linkUrl).pathname;
+    const u = new URL(linkUrl);
+    return u.pathname + u.search;
   } catch {
     // Already a relative path, or malformed — use as-is.
     return linkUrl;
   }
 }
 
-// ─── Notification routing rules ──────────────────────────────────────────────
-//
-// Add new rules here. Each rule maps a *normalized title prefix* (lowercased,
-// matched with `startsWith`) to a route resolver. The resolver returns the
-// client-side path to navigate to, or `null` to fall through to the default
-// (use `linkUrl` from the notification).
-//
-// Examples:
-//   'task completed': '/tasks',
-//   'task blocked':   '/tasks',
-//   'task assigned':  (n) => n.linkUrl ? pathFromLinkUrl(n.linkUrl) : '/tasks',
-//   'comment added':  '/inbox',
-//   'mention':        '/inbox',
-//
-type RouteResolver = string | ((n: Notification) => string | null);
+// There are no /tasks/[id] or /projects/[id] pages — details open in a modal
+// on the list page. So "/tasks/<id>" becomes "/tasks?taskId=<id>" and
+// "/projects/<id>" becomes "/projects?projectId=<id>"; the list pages read
+// that param and open the detail modal automatically.
+const DETAIL_ROUTES: Record<string, { param: string; reserved: string[] }> = {
+  tasks: { param: 'taskId', reserved: ['review'] },
+  projects: { param: 'projectId', reserved: [] },
+};
 
-const NOTIFICATION_ROUTES: Array<{ prefix: string; resolve: RouteResolver }> = [
-  { prefix: "task completed", resolve: "/tasks" },
-  // { prefix: 'task blocked',   resolve: '/tasks' },
-  // { prefix: 'task assigned',  resolve: (n) => pathFromLinkUrl(n.linkUrl) },
-  // { prefix: 'comment added',  resolve: '/inbox' },
-];
+function resolveNotificationTarget(linkUrl?: string | null): string | null {
+  const path = pathFromLinkUrl(linkUrl);
+  if (!path) return null;
 
-function resolveNotificationRoute(n: Notification): string | null {
-  const title = (n.title ?? "").toLowerCase();
-
-  for (const rule of NOTIFICATION_ROUTES) {
-    if (title.startsWith(rule.prefix)) {
-      const path =
-        typeof rule.resolve === "function" ? rule.resolve(n) : rule.resolve;
-      if (path) return path;
-      break;
+  const match = path.match(/^\/(tasks|projects)\/([^/?#]+)\/?$/);
+  if (match) {
+    const [, section, id] = match;
+    const cfg = DETAIL_ROUTES[section];
+    if (!cfg.reserved.includes(id)) {
+      return `/${section}?${cfg.param}=${encodeURIComponent(id)}`;
     }
   }
-
-  // Default: use the link the backend attached to the notification.
-  return pathFromLinkUrl(n.linkUrl);
+  return path;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -123,9 +109,9 @@ export function NotificationBell() {
 
   const handleClickNotification = (n: Notification) => {
     if (!n.isRead) markRead.mutate(n.id);
-    const path = resolveNotificationRoute(n);
+    const target = resolveNotificationTarget(n.linkUrl);
     setOpen(false);
-    if (path) router.push(path);
+    if (target) router.push(target);
   };
 
   return (
