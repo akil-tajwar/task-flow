@@ -93,13 +93,20 @@ function formatDate(d?: string | null) {
 // Minimal shape we need from a task. Kept loose on purpose so this works
 // no matter how the project payload types its nested tasks.
 //
-// The backend should send, for every task:
-//   id, status, isCompleted, progressPercentage (latest logged %, or null)
-// `latestProgress` is accepted as an alternative name for the same value.
+// The backend (getProjects) sends, for every task:
+//   id, status, isCompleted, and `progress`: an array of progress sessions
+//   ({ progressPercentage, startedAt, endedAt, ... }).
+// `progressPercentage` / `latestProgress` directly on the task are also
+// accepted as a fallback.
+type StatProgress = {
+  progressPercentage?: number | string | null;
+};
+
 type StatTask = {
   id?: string;
   status?: string | null;
   isCompleted?: boolean | null;
+  progress?: StatProgress[] | null;
   progressPercentage?: number | string | null;
   latestProgress?: number | string | null;
 };
@@ -110,12 +117,24 @@ function clampPercent(v: unknown): number {
   return Math.min(100, Math.max(0, n));
 }
 
+// Latest logged percentage of a task. Progress can never go backwards, so
+// the highest value in the `progress` array is the latest one.
+function getLoggedPercent(t: StatTask): number {
+  if (Array.isArray(t.progress) && t.progress.length > 0) {
+    return t.progress.reduce(
+      (max, p) => Math.max(max, clampPercent(p.progressPercentage)),
+      0,
+    );
+  }
+  return clampPercent(t.progressPercentage ?? t.latestProgress ?? 0);
+}
+
 // Progress of a single task, 0..100:
 // - done / in_review -> 100 (work is finished; in_review only happens at 100%)
 // - anything else    -> latest logged percentage (0 if nothing logged yet)
 function getTaskPercent(t: StatTask): number {
   if (t.isCompleted || t.status === 'done' || t.status === 'in_review') return 100;
-  return clampPercent(t.progressPercentage ?? t.latestProgress ?? 0);
+  return getLoggedPercent(t);
 }
 
 // Collects tasks from every milestone AND from a top-level `project.tasks`
