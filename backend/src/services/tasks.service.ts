@@ -6,7 +6,8 @@ import {
   comments,
   notifications,
 } from "../db/schema/index.schema";
-
+import { sql } from "drizzle-orm";
+import { taskProgress, projects } from "../db/schema/index.schema";
 import type { NewTask, Comment } from "../validators/tasks.validator";
 
 export const taskService = {
@@ -351,6 +352,214 @@ export const taskService = {
         totalPages: Math.ceil((countRow?.total ?? 0) / limit),
       },
     };
+  },
+
+  // =========================================================
+  // TASK PROGRESS
+  // =========================================================
+
+  async addProgress(
+    tenantId: string,
+    taskId: string,
+    userId: string,
+    input: {
+      startedAt: Date;
+      endedAt: Date;
+      progressPercentage: number;
+    },
+  ) {
+    // ── 1. Basic input validation ────────────────────────────
+    if (input.endedAt <= input.startedAt) {
+      throw new Error("endedAt must be greater than startedAt");
+    }
+
+    if (input.progressPercentage < 0 || input.progressPercentage > 100) {
+      throw new Error("progressPercentage must be between 0 and 100");
+    }
+
+    // ── 2. Load task ─────────────────────────────────────────
+    const task = await db.query.tasks.findFirst({
+      where: and(eq(tasks.id, taskId), eq(tasks.tenantId, tenantId)),
+    });
+
+    if (!task) {
+      throw new Error("Task not found");
+    }
+
+    // ── 3. Only assignee can log progress ────────────────────
+    if (task.assigneeId !== userId) {
+      throw new Error("Only the assignee can log progress on this task");
+    }
+
+    // ── 4. Status guard ──────────────────────────────────────
+    if (task.status === "in_review" || task.status === "done") {
+      throw new Error(
+        `Cannot log progress for a task with status "${task.status}"`,
+      );
+    }
+
+    // ── 5. Compute last progress + overlap check + insert ────
+    return db.transaction(async (tx) => {
+      const [lastEntry] = await tx
+        .select({
+          progressPercentage: taskProgress.progressPercentage,
+        })
+        .from(taskProgress)
+        .where(eq(taskProgress.taskId, taskId))
+        .orderBy(desc(taskProgress.startedAt))
+        .limit(1);
+
+      const lastPercentage = lastEntry?.progressPercentage ?? 0;
+
+      if (input.progressPercentage < lastPercentage) {
+        throw new Error(
+          `Progress cannot go backwards. Last recorded progress was ${lastPercentage}%.`,
+        );
+      }
+
+      // Overlap check — reject if the new session overlaps any existing session
+      const overlapping = await tx.query.taskProgress.findFirst({
+        where: and(
+          eq(taskProgress.taskId, taskId),
+          // existing.startedAt < new.endedAt AND existing.endedAt > new.startedAt
+          sql`${taskProgress.startedAt} < ${input.endedAt}`,
+          sql`${taskProgress.endedAt} > ${input.startedAt}`,
+        ),
+      });
+
+      if (overlapping) {
+        throw new Error(
+          "This time range overlaps with an existing progress entry for this task",
+        );
+      }
+
+      // Insert the new progress row — never touch previous rows
+      const [progress] = await tx
+        .insert(taskProgress)
+        .values({
+          tenantId,
+          taskId,
+          startedAt: input.startedAt,
+          endedAt: input.endedAt,
+          progressPercentage: input.progressPercentage,
+        })
+        .returning();
+
+      if (!progress) {
+        throw new Error("Failed to create progress entry");
+      }
+
+      // ── 6. Recompute actualHours from ALL sessions ─────────
+      const [sumRow] = await tx
+        .select({
+          totalSeconds: sql<string>`COALESCE(SUM(EXTRACT(EPOCH FROM (${taskProgress.endedAt} - ${taskProgress.startedAt}))), 0)`,
+        })
+        .from(taskProgress)
+        .where(eq(taskProgress.taskId, taskId));
+
+      const totalSeconds = Number(sumRow?.totalSeconds ?? 0);
+      const actualHours = Math.round((totalSeconds / 3600) * 100) / 100;
+
+      const isComplete = input.progressPercentage === 100;
+
+      // ── 7. Update task (actualHours, updatedAt, maybe status) ─
+      const [updatedTask] = await tx
+        .update(tasks)
+        .set({
+          actualHours: actualHours.toString(),
+          updatedAt: new Date(),
+          ...(isComplete
+            ? {
+                status: "in_review" as const,
+                isCompleted: false,
+                completedAt: null,
+              }
+            : {}),
+        })
+        .where(and(eq(tasks.id, taskId), eq(tasks.tenantId, tenantId)))
+        .returning();
+
+      if (!updatedTask) {
+        throw new Error("Failed to update task");
+      }
+
+      // ── 8. Notify project owner on every progress log ──────
+      const project = await tx.query.projects.findFirst({
+        where: and(
+          eq(projects.id, task.projectId),
+          eq(projects.tenantId, tenantId),
+        ),
+        columns: { id: true, ownerId: true, name: true },
+      });
+
+      if (project?.ownerId) {
+        await tx.insert(notifications).values({
+          tenantId,
+          userId: project.ownerId,
+          type: "task progress",
+          title: `Progress logged on "${task.title}"`,
+          body: `${input.progressPercentage}% progress logged on task "${task.title}" in project "${project.name}".`,
+          linkUrl: `${process.env.FRONTEND_URL}/tasks/${task.id}`,
+          metadata: {
+            taskId: task.id,
+            projectId: task.projectId,
+            milestoneId: task.milestoneId,
+            progressPercentage: input.progressPercentage,
+            startedAt: input.startedAt.toISOString(),
+            endedAt: input.endedAt.toISOString(),
+            actualHours,
+          },
+          isRead: false,
+          readAt: null,
+        });
+      }
+
+      // ── 9. If 100%, also notify the assignee via changeStatus ─
+      if (isComplete) {
+        await tx.insert(notifications).values({
+          tenantId,
+          userId: task.assigneeId!,
+          type: "task completed",
+          title: `Task ready for review: "${task.title}"`,
+          body: `Your task "${task.title}" reached 100% and has been moved to review.`,
+          linkUrl: `${process.env.FRONTEND_URL}/tasks/${task.id}`,
+          metadata: {
+            taskId: task.id,
+            projectId: task.projectId,
+            milestoneId: task.milestoneId,
+            status: "in_review",
+            progressPercentage: 100,
+            actualHours,
+          },
+          isRead: false,
+          readAt: null,
+        });
+      }
+
+      return {
+        progress,
+        task: updatedTask,
+        actualHours,
+      };
+    });
+  },
+
+  async getTaskProgress(tenantId: string, taskId: string) {
+    const task = await db.query.tasks.findFirst({
+      where: and(eq(tasks.id, taskId), eq(tasks.tenantId, tenantId)),
+    });
+
+    if (!task) {
+      throw new Error("Task not found");
+    }
+
+    return db.query.taskProgress.findMany({
+      where: and(
+        eq(taskProgress.tenantId, tenantId),
+        eq(taskProgress.taskId, taskId),
+      ),
+      orderBy: [desc(taskProgress.startedAt)],
+    });
   },
 
   // =========================================================

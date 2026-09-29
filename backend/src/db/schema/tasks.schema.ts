@@ -81,6 +81,27 @@ export const tasks = pgTable(
   ],
 );
 
+export const taskProgress = pgTable(
+  "task_progress",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    startedAt: timestamp("started_at").notNull(),
+    endedAt: timestamp("ended_at").notNull(),
+    progressPercentage: integer("progress_percentage").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("task_progress_updates_tenant_idx").on(t.tenantId),
+    index("task_progress_updates_task_idx").on(t.taskId),
+  ],
+);
+
 export const taskDependencies = pgTable(
   "task_dependencies",
   {
