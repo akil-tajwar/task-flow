@@ -209,11 +209,16 @@ export const taskController = {
       );
     }
 
+    const comment =
+      typeof body.comment === "string" && body.comment.trim()
+        ? body.comment.trim()
+        : null;
+
     const result = await taskService.addProgress(
       currentUser.tenantId,
       taskId,
       currentUser.id,
-      { startedAt, endedAt, progressPercentage },
+      { startedAt, endedAt, progressPercentage, comment },
     );
 
     return c.json(result, 201);

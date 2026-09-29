@@ -94,6 +94,7 @@ export const taskProgress = pgTable(
     startedAt: timestamp("started_at").notNull(),
     endedAt: timestamp("ended_at").notNull(),
     progressPercentage: integer("progress_percentage").notNull().default(0),
+    comment: text("comment"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [
