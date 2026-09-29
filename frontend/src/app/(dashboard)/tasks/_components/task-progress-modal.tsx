@@ -10,6 +10,8 @@ interface Props {
   onLogged: () => void;
 }
 
+const MAX_COMMENT_LENGTH = 1000;
+
 // <input type="datetime-local"> expects "YYYY-MM-DDTHH:mm" in LOCAL time.
 function toLocalInput(d: Date) {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -50,6 +52,7 @@ export function TaskProgressModal({ task, onClose, onLogged }: Props) {
   const [startedAtInput, setStartedAtInput] = useState<string | null>(null);
   const [endedAtInput, setEndedAtInput] = useState<string | null>(null);
   const [percentageInput, setPercentageInput] = useState<number | null>(null);
+  const [comment, setComment] = useState('');
   const [error, setError] = useState('');
 
   const startedAt = startedAtInput ?? defaultStart;
@@ -78,12 +81,19 @@ export function TaskProgressModal({ task, onClose, onLogged }: Props) {
       setError(`Progress cannot go backwards. Last recorded progress was ${lastPercentage}%.`);
       return;
     }
+    if (comment.length > MAX_COMMENT_LENGTH) {
+      setError(`Comment must be ${MAX_COMMENT_LENGTH} characters or fewer.`);
+      return;
+    }
+
+    const trimmedComment = comment.trim();
 
     try {
       await addProgress.mutateAsync({
         startedAt: new Date(startMs).toISOString(),
         endedAt: new Date(endMs).toISOString(),
         progressPercentage: percentage,
+        comment: trimmedComment || undefined,
       });
       onLogged();
     } catch (err: unknown) {
@@ -171,6 +181,29 @@ export function TaskProgressModal({ task, onClose, onLogged }: Props) {
             </div>
           </div>
 
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-gray-700">
+                Comment <span className="text-gray-400 font-normal">(optional)</span>
+              </label>
+              <span
+                className={`text-xs ${comment.length > MAX_COMMENT_LENGTH ? 'text-red-500' : 'text-gray-400'}`}
+              >
+                {comment.length}/{MAX_COMMENT_LENGTH}
+              </span>
+            </div>
+            <textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              rows={3}
+              placeholder="What did you work on in this session…"
+              className={`${inputCls} resize-none`}
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              The project owner will see this in the progress notification.
+            </p>
+          </div>
+
           {isComplete && (
             <div className="rounded-lg border border-purple-200 bg-purple-50 px-4 py-3 text-sm text-purple-700">
               At 100% this task will be moved to <strong>In Review</strong> automatically.
@@ -186,14 +219,21 @@ export function TaskProgressModal({ task, onClose, onLogged }: Props) {
                 {history.slice(0, 5).map((h) => (
                   <li
                     key={h.id}
-                    className="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2 text-xs text-gray-600"
+                    className="rounded-lg border border-gray-100 px-3 py-2 text-xs text-gray-600"
                   >
-                    <span>
-                      {formatDateTime(h.startedAt)} → {formatDateTime(h.endedAt)}
-                    </span>
-                    <span className="font-semibold text-gray-800 ml-3 flex-shrink-0">
-                      {h.progressPercentage}%
-                    </span>
+                    <div className="flex items-center justify-between">
+                      <span>
+                        {formatDateTime(h.startedAt)} → {formatDateTime(h.endedAt)}
+                      </span>
+                      <span className="font-semibold text-gray-800 ml-3 flex-shrink-0">
+                        {h.progressPercentage}%
+                      </span>
+                    </div>
+                    {h.comment && (
+                      <p className="mt-1 text-gray-500 whitespace-pre-wrap break-words">
+                        {h.comment}
+                      </p>
+                    )}
                   </li>
                 ))}
               </ul>
