@@ -366,6 +366,7 @@ export const taskService = {
       startedAt: Date;
       endedAt: Date;
       progressPercentage: number;
+      comment?: string | null;
     },
   ) {
     // ── 1. Basic input validation ────────────────────────────
@@ -398,8 +399,9 @@ export const taskService = {
       );
     }
 
-    // ── 5. Compute last progress + overlap check + insert ────
+    // ── 5. Transaction ───────────────────────────────────────
     return db.transaction(async (tx) => {
+      // 5a. Last progress entry for monotonic check
       const [lastEntry] = await tx
         .select({
           progressPercentage: taskProgress.progressPercentage,
@@ -417,13 +419,12 @@ export const taskService = {
         );
       }
 
-      // Overlap check — reject if the new session overlaps any existing session
+      // 5b. Overlap check — reject if new session intersects an existing one
       const overlapping = await tx.query.taskProgress.findFirst({
         where: and(
           eq(taskProgress.taskId, taskId),
-          // existing.startedAt < new.endedAt AND existing.endedAt > new.startedAt
-          sql`${taskProgress.startedAt} < ${input.endedAt}`,
-          sql`${taskProgress.endedAt} > ${input.startedAt}`,
+          sql`${taskProgress.startedAt} < ${input.endedAt.toISOString()}::timestamp`,
+          sql`${taskProgress.endedAt} > ${input.startedAt.toISOString()}::timestamp`,
         ),
       });
 
@@ -433,7 +434,7 @@ export const taskService = {
         );
       }
 
-      // Insert the new progress row — never touch previous rows
+      // 5c. Insert the new progress row — never touch previous rows
       const [progress] = await tx
         .insert(taskProgress)
         .values({
@@ -442,6 +443,7 @@ export const taskService = {
           startedAt: input.startedAt,
           endedAt: input.endedAt,
           progressPercentage: input.progressPercentage,
+          comment: input.comment ?? null,
         })
         .returning();
 
@@ -449,7 +451,7 @@ export const taskService = {
         throw new Error("Failed to create progress entry");
       }
 
-      // ── 6. Recompute actualHours from ALL sessions ─────────
+      // 5d. Recompute actualHours from ALL sessions
       const [sumRow] = await tx
         .select({
           totalSeconds: sql<string>`COALESCE(SUM(EXTRACT(EPOCH FROM (${taskProgress.endedAt} - ${taskProgress.startedAt}))), 0)`,
@@ -462,7 +464,7 @@ export const taskService = {
 
       const isComplete = input.progressPercentage === 100;
 
-      // ── 7. Update task (actualHours, updatedAt, maybe status) ─
+      // 5e. Update task (actualHours, updatedAt, maybe status)
       const [updatedTask] = await tx
         .update(tasks)
         .set({
@@ -483,7 +485,7 @@ export const taskService = {
         throw new Error("Failed to update task");
       }
 
-      // ── 8. Notify project owner on every progress log ──────
+      // 5f. Notify project owner on every progress log
       const project = await tx.query.projects.findFirst({
         where: and(
           eq(projects.id, task.projectId),
@@ -498,7 +500,9 @@ export const taskService = {
           userId: project.ownerId,
           type: "task progress",
           title: `Progress logged on "${task.title}"`,
-          body: `${input.progressPercentage}% progress logged on task "${task.title}" in project "${project.name}".`,
+          body: input.comment
+            ? `${input.progressPercentage}% progress on "${task.title}": ${input.comment}`
+            : `${input.progressPercentage}% progress logged on task "${task.title}" in project "${project.name}".`,
           linkUrl: `${process.env.FRONTEND_URL}/tasks/${task.id}`,
           metadata: {
             taskId: task.id,
@@ -508,17 +512,18 @@ export const taskService = {
             startedAt: input.startedAt.toISOString(),
             endedAt: input.endedAt.toISOString(),
             actualHours,
+            comment: input.comment ?? null,
           },
           isRead: false,
           readAt: null,
         });
       }
 
-      // ── 9. If 100%, also notify the assignee via changeStatus ─
-      if (isComplete) {
+      // 5g. If 100%, also notify the assignee that it moved to review
+      if (isComplete && task.assigneeId) {
         await tx.insert(notifications).values({
           tenantId,
-          userId: task.assigneeId!,
+          userId: task.assigneeId,
           type: "task completed",
           title: `Task ready for review: "${task.title}"`,
           body: `Your task "${task.title}" reached 100% and has been moved to review.`,
