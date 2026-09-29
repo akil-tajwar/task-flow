@@ -210,9 +210,9 @@ export function TaskFormModal({ open, task, projects, defaultProjectId, onClose 
               <Field label="Estimated Hours">
                 <input type="number" step="0.5" value={form.estimatedHours} onChange={(e) => set({ estimatedHours: e.target.value })} className={inputCls} />
               </Field>
-              <Field label="Actual Hours">
+              {/* <Field label="Actual Hours">
                 <input type="number" step="0.5" value={form.actualHours} onChange={(e) => set({ actualHours: e.target.value })} className={inputCls} />
-              </Field>
+              </Field> */}
             </div>
           </section>
 
