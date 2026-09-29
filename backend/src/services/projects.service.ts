@@ -9,7 +9,7 @@ import {
   type Project,
 } from "../db/schema/projects.schema";
 import { users } from "../db/schema/users.schema";
-import { tasks } from "../db/schema/tasks.schema";
+import { taskProgress, tasks } from "../db/schema/tasks.schema";
 import { notifications } from "../db/schema/notifications.schema";
 
 // ---------------------------------------------------------------
@@ -94,7 +94,7 @@ function scopedProject(tenantId: string, id: string) {
 }
 
 async function getProjectMembers(
-  projectId: string
+  projectId: string,
 ): Promise<ProjectMemberResponse[]> {
   return db
     .select({
@@ -119,7 +119,7 @@ async function getProjectMilestones(projectId: string) {
 
 async function getProjectWithDetails(
   tenantId: string,
-  projectId: string
+  projectId: string,
 ): Promise<ProjectWithDetails> {
   const project = await getProjectById(tenantId, projectId);
 
@@ -149,12 +149,12 @@ async function getProjectWithDetails(
 async function resolveProjectMemberUserId(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   tenantId: string,
-  member: CreateProjectMemberInput
+  member: CreateProjectMemberInput,
 ): Promise<string> {
   if (member.isNewMember) {
     if (!member.name || !member.email || !member.password) {
       throw new Error(
-        "name, email and password are required when creating a new member"
+        "name, email and password are required when creating a new member",
       );
     }
 
@@ -202,7 +202,7 @@ async function insertProjectMembers(
   tenantId: string,
   projectId: string,
   projectName: string,
-  memberInputs: CreateProjectMemberInput[]
+  memberInputs: CreateProjectMemberInput[],
 ) {
   if (memberInputs.length === 0) return;
 
@@ -211,7 +211,7 @@ async function insertProjectMembers(
     memberInputs.map(async (member) => ({
       member,
       userId: await resolveProjectMemberUserId(tx, tenantId, member),
-    }))
+    })),
   );
 
   const insertedMembers = await tx
@@ -223,7 +223,7 @@ async function insertProjectMembers(
         role: member.role ?? "member",
         hourlyRate: member.hourlyRate ?? null,
         billableRate: member.billableRate ?? null,
-      }))
+      })),
     )
     .returning();
 
@@ -243,7 +243,7 @@ async function insertProjectMembers(
       },
       isRead: false,
       readAt: null,
-    }))
+    })),
   );
 }
 
@@ -256,7 +256,7 @@ async function insertProjectMembers(
  */
 export async function createProject(
   tenantId: string,
-  input: CreateProjectInput
+  input: CreateProjectInput,
 ): Promise<ProjectWithDetails> {
   const {
     projectMembers: memberInputs = [],
@@ -284,7 +284,7 @@ export async function createProject(
       tenantId,
       createdProject.id,
       createdProject.name,
-      memberInputs
+      memberInputs,
     );
 
     if (milestoneInputs.length > 0) {
@@ -297,7 +297,7 @@ export async function createProject(
           completedAt: milestone.completedAt ?? null,
           isCompleted: milestone.isCompleted ?? false,
           sortOrder: milestone.sortOrder ?? 0,
-        }))
+        })),
       );
     }
 
@@ -355,6 +355,7 @@ export async function getProjects(tenantId: string, query: ListProjectsQuery) {
     };
   }
 
+  // ── Load members, milestones ─────────────────────────────
   const [memberRows, milestoneRows] = await Promise.all([
     db
       .select({
@@ -377,6 +378,7 @@ export async function getProjects(tenantId: string, query: ListProjectsQuery) {
 
   const milestoneIds = milestoneRows.map((milestone) => milestone.id);
 
+  // ── Load tasks for those milestones ──────────────────────
   const taskRows =
     milestoneIds.length > 0
       ? await db
@@ -386,18 +388,53 @@ export async function getProjects(tenantId: string, query: ListProjectsQuery) {
           .orderBy(tasks.sortOrder, tasks.createdAt)
       : [];
 
+  const taskIds = taskRows.map((task) => task.id);
+
+  // ── Load task progress for those tasks ───────────────────
+  const progressRows =
+    taskIds.length > 0
+      ? await db
+          .select()
+          .from(taskProgress)
+          .where(inArray(taskProgress.taskId, taskIds))
+          .orderBy(taskProgress.startedAt)
+      : [];
+
+  // ── Group progress by taskId (map for O(1) lookup) ───────
+  const progressByTaskId = new Map<
+    string,
+    (typeof taskProgress.$inferSelect)[]
+  >();
+
+  for (const p of progressRows) {
+    const list = progressByTaskId.get(p.taskId);
+    if (list) list.push(p);
+    else progressByTaskId.set(p.taskId, [p]);
+  }
+
+  // ── Group tasks by milestoneId (map for O(1) lookup) ─────
+  const tasksByMilestoneId = new Map<string, typeof taskRows>();
+  for (const t of taskRows) {
+    if (!t.milestoneId) continue;
+    const list = tasksByMilestoneId.get(t.milestoneId);
+    if (list) list.push(t);
+    else tasksByMilestoneId.set(t.milestoneId, [t]);
+  }
+
+  // ── Assemble ─────────────────────────────────────────────
   const data = rows.map((project) => ({
     ...project,
 
-    projectMembers: memberRows.filter(
-      (member) => member.projectId === project.id
-    ),
+    projectMembers: memberRows.filter((m) => m.projectId === project.id),
 
     milestones: milestoneRows
-      .filter((milestone) => milestone.projectId === project.id)
+      .filter((m) => m.projectId === project.id)
       .map((milestone) => ({
         ...milestone,
-        tasks: taskRows.filter((task) => task.milestoneId === milestone.id),
+        tasks: (tasksByMilestoneId.get(milestone.id) ?? []).map((task) => ({
+          ...task,
+          progress: progressByTaskId.get(task.id) ?? [],
+        })),
       })),
   }));
 
@@ -417,7 +454,7 @@ export async function getProjects(tenantId: string, query: ListProjectsQuery) {
  */
 export async function getProjectById(
   tenantId: string,
-  id: string
+  id: string,
 ): Promise<Project> {
   const [row] = await db
     .select()
@@ -436,7 +473,7 @@ export async function getProjectById(
  */
 export async function getProjectDetails(
   tenantId: string,
-  id: string
+  id: string,
 ): Promise<ProjectWithDetails> {
   return getProjectWithDetails(tenantId, id);
 }
@@ -450,7 +487,7 @@ export async function getProjectDetails(
 export async function updateProject(
   tenantId: string,
   id: string,
-  input: UpdateProjectInput
+  input: UpdateProjectInput,
 ): Promise<ProjectWithDetails> {
   const {
     projectMembers: memberInputs,
@@ -491,7 +528,7 @@ export async function updateProject(
             completedAt: milestone.completedAt ?? null,
             isCompleted: milestone.isCompleted ?? false,
             sortOrder: milestone.sortOrder ?? 0,
-          }))
+          })),
         );
       }
     }
@@ -507,7 +544,7 @@ export async function updateProject(
  */
 export async function archiveProject(
   tenantId: string,
-  id: string
+  id: string,
 ): Promise<ProjectWithDetails> {
   const [archived] = await db
     .update(projects)
@@ -532,7 +569,7 @@ export async function archiveProject(
  */
 export async function restoreProject(
   tenantId: string,
-  id: string
+  id: string,
 ): Promise<ProjectWithDetails> {
   const [restored] = await db
     .update(projects)
@@ -557,7 +594,7 @@ export async function restoreProject(
  */
 export async function deleteProject(
   tenantId: string,
-  id: string
+  id: string,
 ): Promise<void> {
   const [deleted] = await db
     .delete(projects)
