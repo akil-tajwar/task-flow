@@ -10,7 +10,6 @@ tasksRoutes.use("*", authMiddleware, tenantMiddleware);
 // =========================================================
 // TASKS
 // =========================================================
-
 tasksRoutes.get("/getAll", taskController.getAll);
 tasksRoutes.get("/getById/:id", taskController.getById);
 tasksRoutes.post("/create", taskController.create);
@@ -22,9 +21,14 @@ tasksRoutes.patch("/done/:id", taskController.done);
 tasksRoutes.patch("/blocked/:id", taskController.blocked);
 
 // =========================================================
+// TASK PROGRESS
+// =========================================================
+tasksRoutes.post("/progress/create", taskController.addProgress);
+tasksRoutes.get("/progress/getAll/:taskId", taskController.getTaskProgress);
+
+// =========================================================
 // DEPENDENCIES
 // =========================================================
-
 tasksRoutes.post("/dependencies/create", taskController.addDependency);
 tasksRoutes.get("/dependencies/getAll/:taskId", taskController.getDependencies);
 tasksRoutes.delete(
@@ -35,7 +39,6 @@ tasksRoutes.delete(
 // =========================================================
 // COMMENTS
 // =========================================================
-
 tasksRoutes.post("/comments/create", taskController.createComment);
 tasksRoutes.get("/comments/getAll/:taskId", taskController.getTaskComments);
 tasksRoutes.get("/comments/getById/:commentId", taskController.getCommentById);

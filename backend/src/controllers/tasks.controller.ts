@@ -64,7 +64,7 @@ export const taskController = {
         priority: query.priority as any,
 
         search: query.search,
-      }
+      },
     );
 
     return c.json(result);
@@ -171,6 +171,71 @@ export const taskController = {
   },
 
   // =========================================================
+  // TASK PROGRESS
+  // =========================================================
+
+  async addProgress(c: Context) {
+    const currentUser = c.get("user");
+    const body = await c.req.json();
+
+    const taskId = typeof body.taskId === "string" ? body.taskId : "";
+    if (!taskId) {
+      return c.json({ error: "Task ID is required" }, 400);
+    }
+
+    const startedAt = body.startedAt ? new Date(body.startedAt) : null;
+    const endedAt = body.endedAt ? new Date(body.endedAt) : null;
+
+    if (!startedAt || isNaN(startedAt.getTime())) {
+      return c.json({ error: "Valid startedAt is required" }, 400);
+    }
+    if (!endedAt || isNaN(endedAt.getTime())) {
+      return c.json({ error: "Valid endedAt is required" }, 400);
+    }
+
+    const progressPercentage =
+      typeof body.progressPercentage === "number"
+        ? body.progressPercentage
+        : Number(body.progressPercentage);
+
+    if (
+      !Number.isFinite(progressPercentage) ||
+      progressPercentage < 0 ||
+      progressPercentage > 100
+    ) {
+      return c.json(
+        { error: "progressPercentage must be a number between 0 and 100" },
+        400,
+      );
+    }
+
+    const result = await taskService.addProgress(
+      currentUser.tenantId,
+      taskId,
+      currentUser.id,
+      { startedAt, endedAt, progressPercentage },
+    );
+
+    return c.json(result, 201);
+  },
+
+  async getTaskProgress(c: Context) {
+    const currentUser = c.get("user");
+    const taskId = c.req.param("taskId");
+
+    if (!taskId) {
+      return c.json({ error: "Task ID is required" }, 400);
+    }
+
+    const result = await taskService.getTaskProgress(
+      currentUser.tenantId,
+      taskId,
+    );
+
+    return c.json(result);
+  },
+
+  // =========================================================
   // DEPENDENCIES
   // =========================================================
 
@@ -183,7 +248,7 @@ export const taskController = {
       currentUser.tenantId,
       body.taskId,
       body.dependsOnTaskId,
-      body.type ?? "blocks"
+      body.type ?? "blocks",
     );
 
     return c.json(dependency, 201);
@@ -197,7 +262,7 @@ export const taskController = {
     }
     const dependencies = await taskService.getDependencies(
       currentUser.tenantId,
-      taskId
+      taskId,
     );
 
     return c.json(dependencies);
@@ -213,7 +278,7 @@ export const taskController = {
 
     const result = await taskService.deleteDependency(
       currentUser.tenantId,
-      dependencyId
+      dependencyId,
     );
 
     return c.json(result);
@@ -254,8 +319,8 @@ export const taskController = {
     const fileList: File[] = Array.isArray(rawFiles)
       ? rawFiles.filter((item): item is File => item instanceof File)
       : rawFiles instanceof File
-      ? [rawFiles]
-      : [];
+        ? [rawFiles]
+        : [];
 
     console.log("📎 files received:", fileList.length);
 
@@ -264,7 +329,7 @@ export const taskController = {
       const comment = await taskService.createComment(
         currentUser.tenantId,
         currentUser.id,
-        { taskId, content, parentCommentId, attachments: null }
+        { taskId, content, parentCommentId, attachments: null },
       );
       return c.json(comment, 201);
     }
@@ -312,7 +377,7 @@ export const taskController = {
         content,
         parentCommentId,
         attachments: attachments.length ? attachments : null,
-      }
+      },
     );
 
     console.log("✅ comment created:", comment?.id);
@@ -327,7 +392,7 @@ export const taskController = {
     }
     const result = await taskService.getTaskComments(
       currentUser.tenantId,
-      taskId
+      taskId,
     );
 
     return c.json(result);
@@ -364,7 +429,7 @@ export const taskController = {
       currentUser.tenantId,
       currentUser.id,
       id,
-      body.content
+      body.content,
     );
 
     return c.json(comment);
@@ -381,7 +446,7 @@ export const taskController = {
     const result = await taskService.deleteComment(
       currentUser.tenantId,
       currentUser.id,
-      id
+      id,
     );
 
     return c.json(result);
