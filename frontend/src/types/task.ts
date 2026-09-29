@@ -104,7 +104,8 @@ export const taskFiltersSchema = z.object({
 
 // --- Task Progress Schemas ---
 // One row = one work session (startedAt → endedAt) plus the cumulative
-// progress percentage reported at the end of that session.
+// progress percentage reported at the end of that session, and an optional
+// note describing what was done in the session.
 export const taskProgressSchema = z.object({
   id: z.string().uuid(),
   tenantId: z.string().uuid(),
@@ -112,15 +113,18 @@ export const taskProgressSchema = z.object({
   startedAt: z.string(),
   endedAt: z.string(),
   progressPercentage: z.number().int().min(0).max(100),
+  comment: z.string().nullable(),
   createdAt: z.string(),
 });
 
 // What the client sends to POST /tasks/progress/create (taskId is added by
-// the hook). Dates are ISO strings.
+// the hook). Dates are ISO strings. `comment` is optional — the backend
+// treats a missing/blank comment as null.
 export const addProgressInputSchema = z.object({
   startedAt: z.string(),
   endedAt: z.string(),
   progressPercentage: z.number().int().min(0).max(100),
+  comment: z.string().optional(),
 });
 
 // --- Task Dependencies Schema ---
@@ -158,7 +162,6 @@ export type TaskDependency = z.infer<typeof taskDependenciesSchema>;
 export type CreateTaskInput = z.infer<typeof createTaskInputSchema>;
 export type UpdateTaskInput = z.infer<typeof updateTaskInputSchema>;
 export type TaskFilters = z.infer<typeof taskFiltersSchema>;
-
 
 
 // import { z } from "zod";
