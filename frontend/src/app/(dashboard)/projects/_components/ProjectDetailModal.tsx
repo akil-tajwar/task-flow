@@ -1,16 +1,21 @@
-'use client';
+"use client";
 
-import type { Project } from '@/types/project';
+import { useState } from "react";
+import type { Project } from "@/types/project";
 
 function formatDate(d?: string | null) {
-  if (!d) return '—';
-  return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function formatMoney(amount?: string | null, currency?: string | null) {
-  if (!amount) return '—';
+  if (!amount) return "—";
   const n = Number(amount);
-  return `${currency ?? 'USD'} ${n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+  return `${currency ?? "USD"} ${n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
 // overall + per-milestone task stats
@@ -21,17 +26,54 @@ function getTaskStats(tasks: { isCompleted: boolean }[]) {
   return { total, completed, percent };
 }
 
-function ProgressBar({ percent, size = 'md' }: { percent: number; size?: 'sm' | 'md' }) {
-  const height = size === 'sm' ? 'h-1' : 'h-2';
+// overall task progress based on latest progress entry
+function getTaskProgressPercent(task: {
+  isCompleted: boolean;
+  progress?: Array<{ progressPercentage: number; createdAt: string }>;
+}) {
+  if (task.isCompleted) return 100;
+  const entries = task.progress ?? [];
+  if (entries.length === 0) return 0;
+  const latest = entries.reduce((a, b) =>
+    new Date(a.createdAt).getTime() > new Date(b.createdAt).getTime() ? a : b,
+  );
+  return latest.progressPercentage;
+}
+
+function ProgressBar({
+  percent,
+  size = "md",
+}: {
+  percent: number;
+  size?: "sm" | "md";
+}) {
+  const height = size === "sm" ? "h-1" : "h-2";
   return (
-    <div className={`w-full rounded-full bg-gray-100 overflow-hidden ${height}`}>
+    <div
+      className={`w-full rounded-full bg-gray-100 overflow-hidden ${height}`}
+    >
       <div
-        className={`h-full rounded-full transition-all ${percent === 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+        className={`h-full rounded-full transition-all ${percent === 100 ? "bg-emerald-500" : "bg-indigo-500"}`}
         style={{ width: `${percent}%` }}
       />
     </div>
   );
 }
+
+const statusStyles: Record<string, string> = {
+  done: "bg-emerald-50 text-emerald-700",
+  in_progress: "bg-blue-50 text-blue-700",
+  in_review: "bg-amber-50 text-amber-700",
+  todo: "bg-gray-100 text-gray-600",
+  blocked: "bg-red-50 text-red-700",
+};
+
+const priorityStyles: Record<string, string> = {
+  high: "bg-red-50 text-red-700",
+  medium: "bg-amber-50 text-amber-700",
+  low: "bg-gray-100 text-gray-600",
+  urgent: "bg-red-100 text-red-800",
+};
 
 interface Props {
   project: Project | null;
@@ -40,34 +82,63 @@ interface Props {
 }
 
 export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
+  // must be declared before any early return to satisfy rules-of-hooks
+  const [openMilestones, setOpenMilestones] = useState<Record<string, boolean>>(
+    {},
+  );
+
   if (!project) return null;
 
-  const sortedMilestones = [...project.milestones].sort((a, b) => a.sortOrder - b.sortOrder);
+  const sortedMilestones = [...project.milestones].sort(
+    (a, b) => a.sortOrder - b.sortOrder,
+  );
   const completedCount = sortedMilestones.filter((m) => m.isCompleted).length;
 
   // overall task progress across all milestones
   const allTasks = sortedMilestones.flatMap((m) => m.tasks ?? []);
   const overallStats = getTaskStats(allTasks);
 
+  const toggleMilestone = (id: string) => {
+    setOpenMilestones((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={onClose}
+      />
 
       <div className="relative z-10 w-full max-w-5xl max-h-[90vh] flex flex-col bg-white rounded-2xl shadow-2xl">
         {/* Header */}
         <div className="flex items-start justify-between border-b px-6 py-4 flex-shrink-0">
           <div className="flex items-center gap-2.5">
-            <span className="h-3 w-3 rounded-full flex-shrink-0 mt-1" style={{ backgroundColor: project.color ?? '#6366f1' }} />
+            <span
+              className="h-3 w-3 rounded-full flex-shrink-0 mt-1"
+              style={{ backgroundColor: project.color ?? "#6366f1" }}
+            />
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">{project.name}</h2>
+              <h2 className="text-lg font-semibold text-gray-900">
+                {project.name}
+              </h2>
               {project.description && (
-                <p className="text-sm text-gray-500 mt-0.5 max-w-md">{project.description}</p>
+                <p className="text-sm text-gray-500 mt-0.5 max-w-md">
+                  {project.description}
+                </p>
               )}
             </div>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 transition-colors flex-shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 transition-colors flex-shrink-0"
+          >
             <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              <path
+                fillRule="evenodd"
+                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                clipRule="evenodd"
+              />
             </svg>
           </button>
         </div>
@@ -77,19 +148,31 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
           {/* Status + Timeline + Budget grid */}
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Status</p>
-              <p className="text-sm text-gray-800 capitalize">{project.status.replace('_', ' ')}</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                Status
+              </p>
+              <p className="text-sm text-gray-800 capitalize">
+                {project.status.replace("_", " ")}
+              </p>
             </div>
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Timeline</p>
-              <p className="text-sm text-gray-800">{formatDate(project.startDate)} → {formatDate(project.endDate)}</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                Timeline
+              </p>
+              <p className="text-sm text-gray-800">
+                {formatDate(project.startDate)} → {formatDate(project.endDate)}
+              </p>
             </div>
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Budget</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                Budget
+              </p>
               <p className="text-sm text-gray-800">
                 {formatMoney(project.budgetAmount, project.currency)}
                 {project.budgetType && (
-                  <span className="text-xs text-gray-400 ml-1 capitalize">({project.budgetType.replace('_', ' ')})</span>
+                  <span className="text-xs text-gray-400 ml-1 capitalize">
+                    ({project.budgetType.replace("_", " ")})
+                  </span>
                 )}
               </p>
             </div>
@@ -98,15 +181,18 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
           {/* Overall task progress */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Task Progress</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                Project Progress
+              </p>
               <p className="text-xs text-gray-500">
-                {overallStats.completed}/{overallStats.total} tasks · {overallStats.percent}%
+                {overallStats.completed}/{overallStats.total} tasks ·{" "}
+                {overallStats.percent}%
               </p>
             </div>
             <ProgressBar percent={overallStats.percent} />
           </div>
 
-          {/* Tags — full list, no truncation */}
+          {/* Tags */}
           <div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
               Tags {project.tags.length > 0 && `(${project.tags.length})`}
@@ -116,7 +202,12 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {project.tags.map((t) => (
-                  <span key={t} className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full">{t}</span>
+                  <span
+                    key={t}
+                    className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full"
+                  >
+                    {t}
+                  </span>
                 ))}
               </div>
             )}
@@ -132,22 +223,27 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {project.projectMembers.map((m) => (
-                  <span key={m.id} className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full">
-                    {m.memberName ?? 'Unnamed member'}
+                  <span
+                    key={m.id}
+                    className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full"
+                  >
+                    {m.memberName ?? "Unnamed member"}
                   </span>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Milestones — full detail + per-milestone task progress */}
+          {/* Milestones — accordion; tasks shown inside */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                 Milestones ({sortedMilestones.length})
               </p>
               {sortedMilestones.length > 0 && (
-                <p className="text-xs text-gray-400">{completedCount}/{sortedMilestones.length} completed</p>
+                <p className="text-xs text-gray-400">
+                  {completedCount}/{sortedMilestones.length} completed
+                </p>
               )}
             </div>
 
@@ -156,31 +252,77 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
             ) : (
               <div className="space-y-2">
                 {sortedMilestones.map((m) => {
-                  const mStats = getTaskStats(m.tasks ?? []);
+                  const milestoneTasks = [...(m.tasks ?? [])].sort(
+                    (a, b) => a.sortOrder - b.sortOrder,
+                  );
+                  const mStats = getTaskStats(milestoneTasks);
+                  const isOpen = !!openMilestones[m.id ?? m.name];
+
                   return (
-                    <div key={m.id ?? m.name} className="border border-gray-200 rounded-lg p-3">
-                      <div className="flex items-start gap-3">
-                        <div className={`mt-0.5 h-4 w-4 rounded-full border-2 flex-shrink-0 ${
-                          m.isCompleted ? 'bg-emerald-500 border-emerald-500' : 'border-gray-300'
-                        }`} />
+                    <div
+                      key={m.id ?? m.name}
+                      className="border border-gray-200 rounded-lg overflow-hidden"
+                    >
+                      {/* Milestone header (clickable) */}
+                      <button
+                        type="button"
+                        onClick={() => toggleMilestone(m.id ?? m.name)}
+                        className="w-full flex items-start gap-3 px-3 py-3 text-left hover:bg-gray-50/70 transition-colors"
+                      >
+                        <svg
+                          className={`h-4 w-4 mt-0.5 text-gray-400 flex-shrink-0 transition-transform ${
+                            isOpen ? "rotate-90" : ""
+                          }`}
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+
+                        <div
+                          className={`mt-0.5 h-4 w-4 rounded-full border-2 flex-shrink-0 ${
+                            m.isCompleted
+                              ? "bg-emerald-500 border-emerald-500"
+                              : "border-gray-300"
+                          }`}
+                        />
+
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
-                            <p className={`text-sm font-medium ${m.isCompleted ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                            <p
+                              className={`text-sm font-medium ${
+                                m.isCompleted
+                                  ? "text-gray-400 line-through"
+                                  : "text-gray-900"
+                              }`}
+                            >
                               {m.name}
                             </p>
                             {m.dueDate && (
-                              <span className="text-xs text-gray-400 flex-shrink-0">{formatDate(m.dueDate)}</span>
+                              <span className="text-xs text-gray-400 flex-shrink-0">
+                                {formatDate(m.dueDate)}
+                              </span>
                             )}
                           </div>
+
                           {m.description && (
-                            <p className="text-xs text-gray-500 mt-0.5">{m.description}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {m.description}
+                            </p>
                           )}
 
-                          {/* per-milestone task progress (only if it has tasks) */}
+                          {/* per-milestone task progress bar */}
                           {mStats.total > 0 && (
                             <div className="mt-2 flex items-center gap-2">
                               <div className="flex-1">
-                                <ProgressBar percent={mStats.percent} size="sm" />
+                                <ProgressBar
+                                  percent={mStats.percent}
+                                  size="sm"
+                                />
                               </div>
                               <span className="text-xs text-gray-400 flex-shrink-0">
                                 {mStats.completed}/{mStats.total} tasks
@@ -188,7 +330,113 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
                             </div>
                           )}
                         </div>
-                      </div>
+                      </button>
+
+                      {/* Milestone accordion content — tasks */}
+                      {isOpen && (
+                        <div className="border-t border-gray-100 bg-gray-50/50 px-3 py-3">
+                          {milestoneTasks.length === 0 ? (
+                            <p className="text-xs text-gray-400">
+                              No tasks in this milestone.
+                            </p>
+                          ) : (
+                            <div className="space-y-1.5">
+                              {milestoneTasks.map((task) => {
+                                const taskPercent =
+                                  getTaskProgressPercent(task);
+                                return (
+                                  <div
+                                    key={task.id}
+                                    className="bg-white border border-gray-100 rounded-lg px-3 py-2.5"
+                                  >
+                                    <div className="flex items-start gap-2.5">
+                                      <span
+                                        className={`mt-1 h-3.5 w-3.5 rounded-full border-2 flex-shrink-0 ${
+                                          task.isCompleted
+                                            ? "bg-emerald-500 border-emerald-500"
+                                            : "border-gray-300"
+                                        }`}
+                                      />
+
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                                          <p
+                                            className={`text-sm font-medium ${
+                                              task.isCompleted
+                                                ? "text-gray-400 line-through"
+                                                : "text-gray-900"
+                                            }`}
+                                          >
+                                            {task.title}
+                                          </p>
+                                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                                            {task.priority && (
+                                              <span
+                                                className={`text-[10px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded ${
+                                                  priorityStyles[
+                                                    task.priority
+                                                  ] ??
+                                                  "bg-gray-100 text-gray-600"
+                                                }`}
+                                              >
+                                                {task.priority}
+                                              </span>
+                                            )}
+                                            <span
+                                              className={`text-[10px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded ${
+                                                statusStyles[task.status] ??
+                                                "bg-gray-100 text-gray-600"
+                                              }`}
+                                            >
+                                              {task.status.replace("_", " ")}
+                                            </span>
+                                          </div>
+                                        </div>
+
+                                        {task.description && (
+                                          <p className="text-xs text-gray-500 mt-0.5">
+                                            {task.description}
+                                          </p>
+                                        )}
+
+                                        {/* meta row */}
+                                        <div className="flex items-center gap-3 mt-1 text-xs text-gray-400 flex-wrap">
+                                          {task.dueDate && (
+                                            <span>
+                                              Due {formatDate(task.dueDate)}
+                                            </span>
+                                          )}
+                                          {task.estimatedHours && (
+                                            <span>
+                                              Est {task.estimatedHours}h
+                                            </span>
+                                          )}
+                                          {task.actualHours && (
+                                            <span>Act {task.actualHours}h</span>
+                                          )}
+                                        </div>
+
+                                        {/* task overall progress bar */}
+                                        <div className="mt-1.5 flex items-center gap-2">
+                                          <div className="flex-1">
+                                            <ProgressBar
+                                              percent={taskPercent}
+                                              size="sm"
+                                            />
+                                          </div>
+                                          <span className="text-xs text-gray-400 flex-shrink-0">
+                                            {taskPercent}%
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -199,13 +447,19 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 border-t px-6 py-4 flex-shrink-0">
-          <button type="button" onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
             Close
           </button>
           {onEdit && (
-            <button type="button" onClick={() => onEdit(project)}
-              className="px-5 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors">
+            <button
+              type="button"
+              onClick={() => onEdit(project)}
+              className="px-5 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+            >
               Edit project
             </button>
           )}
@@ -214,5 +468,3 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
     </div>
   );
 }
-
-
