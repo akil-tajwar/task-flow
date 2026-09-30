@@ -11,7 +11,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <DataSnapshotProvider>
       <div className="flex min-h-screen">
         {/* Sidebar */}
-        <aside className="w-60 bg-gray-900 flex flex-col flex-shrink-0">
+        <aside className="w-60 bg-gray-900 flex flex-col flex-shrink-0 fixed h-full">
           <div className="px-4 pt-6 pb-2">
             <div className="flex items-center gap-2">
               <div className="h-7 w-7 rounded-lg bg-indigo-600 flex items-center justify-center">
@@ -26,7 +26,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </aside>
 
         {/* Main column */}
-        <div className="flex-1 flex flex-col min-h-screen min-w-0">
+        <div className="flex-1 flex flex-col min-h-screen min-w-0 pl-60">
 
           {/* Offline banner (above topbar) */}
           <OfflineBanner />
