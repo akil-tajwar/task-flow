@@ -21,4 +21,5 @@ export * from './integrations.schema';
 export * from './reporting.schema';
 export * from './notifications.schema';
 export * from './activity-logs.schema';
+export * from './push-subscriptions.schema';
 export * from './relations.schema';

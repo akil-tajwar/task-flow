@@ -3,6 +3,7 @@ import { serve } from '@hono/node-server';
 import { app } from './app';
 import { connectRedis } from './lib/redis';
 import { env } from './lib/env';
+import { startPushJobs } from './jobs/push.job';
 
 async function main() {
   await connectRedis();
@@ -10,6 +11,8 @@ async function main() {
     console.log(`Server running on http://localhost:${env.PORT}`);
   });
 }
+
+startPushJobs();
 
 main().catch((err) => {
   console.error('Failed to start server:', err);

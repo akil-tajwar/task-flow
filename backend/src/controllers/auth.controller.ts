@@ -15,13 +15,15 @@ export const authController = {
       c.req.header("x-forwarded-for")?.split(",")[0].trim() ??
       c.req.header("x-real-ip");
     const ua = c.req.header("user-agent");
-    const result = await authService.login(input, { ip, ua });
+    const deviceId = c.req.header("x-device-id");
+    const result = await authService.login(input, { ip, ua, deviceId });
     return c.json(result);
   },
 
   async refresh(c: Context) {
     const { refreshToken } = await c.req.json();
-    const result = await authService.refresh(refreshToken);
+    const deviceId = c.req.header("x-device-id");
+    const result = await authService.refresh(refreshToken, deviceId);
     return c.json(result);
   },
 
@@ -31,7 +33,8 @@ export const authController = {
       c.req.header("x-forwarded-for")?.split(",")[0].trim() ??
       c.req.header("x-real-ip");
     const ua = c.req.header("user-agent");
-    await authService.logout(user.id, user.tenantId, { ip, ua });
+    const deviceId = c.req.header("x-device-id");
+    await authService.logout(user.id, user.tenantId, { ip, ua, deviceId });
     return c.json({ message: "Logged out" });
   },
 
