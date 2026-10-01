@@ -5,6 +5,7 @@ import { clientsRoutes } from "./clients.routes";
 import { projectsRoutes } from "./projects.routes";
 import { tasksRoutes } from "./tasks.routes";
 import { notificationsRoutes } from "./notifications.routes";
+import { pushRoutes } from "./push.routes";
 
 const routes = new Hono();
 
@@ -14,5 +15,6 @@ routes.route("/clients", clientsRoutes);
 routes.route("/projects", projectsRoutes);
 routes.route("/tasks", tasksRoutes);
 routes.route("/notifications", notificationsRoutes);
+routes.route("/push", pushRoutes);
 
 export { routes };

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { setBackendReachable } from './connectivity';
+import { getDeviceId } from './device-id';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api';
 
@@ -9,6 +10,9 @@ api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('accessToken');
     if (token) config.headers.Authorization = `Bearer ${token}`;
+  }
+  if (typeof window !== "undefined") {
+    config.headers["x-device-id"] = getDeviceId();
   }
   return config;
 });
