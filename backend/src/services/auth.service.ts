@@ -9,6 +9,13 @@ import {
 } from "../lib/jwt";
 import { redis } from "../lib/redis";
 import type { LoginInput, RegisterInput } from "../validators/auth.validator";
+import { pushService } from "./push.service";
+
+interface RequestMeta {
+  ip?: string | null;
+  ua?: string | null;
+  deviceId?: string | null;
+}
 
 interface RequestMeta {
   ip?: string | null;
@@ -115,6 +122,12 @@ export const authService = {
 
       console.log("8. Activity log success");
 
+      if (meta?.deviceId) {
+        await pushService
+          .touchLogin(meta.deviceId, user.id)
+          .catch((e) => console.error("push touchLogin failed", e));
+      }
+
       return {
         accessToken: signAccessToken(payload),
         refreshToken,
@@ -131,10 +144,17 @@ export const authService = {
     }
   },
 
-  async refresh(token: string) {
+  async refresh(token: string, deviceId?: string | null) {
     const payload = verifyRefreshToken(token);
     const stored = await redis.get(`refresh:${payload.sub}`);
     if (stored !== token) throw new Error("Invalid refresh token");
+
+    if (deviceId) {
+      await pushService
+        .touchLogin(deviceId, payload.sub)
+        .catch((e) => console.error("push touch failed", e));
+    }
+
     return { accessToken: signAccessToken(payload) };
   },
 
@@ -149,6 +169,11 @@ export const authService = {
             ipAddress: meta?.ip ?? null,
             userAgent: meta?.ua ?? null,
           })
+        : Promise.resolve(),
+      meta?.deviceId
+        ? pushService
+            .unsubscribe(meta.deviceId, userId)
+            .catch((e) => console.error(e))
         : Promise.resolve(),
     ]);
   },
@@ -198,7 +223,7 @@ export const authService = {
         .where(where),
     ]);
 
-    return rows
+    return rows;
   },
 
   async listActivity(

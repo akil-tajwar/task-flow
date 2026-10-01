@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { AppUser, AuthUser } from "@/types";
+import { registerPush } from "@/lib/push";
 
 export function useMe() {
   return useQuery<AuthUser>({
@@ -22,7 +23,10 @@ export function useLogin() {
       localStorage.setItem("refreshToken", data.refreshToken);
       return data;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["me"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["me"] });
+      registerPush().catch((e) => console.error("push register failed", e));
+    },
   });
 }
 
