@@ -1,7 +1,8 @@
 import webpush from "web-push";
-import { and, eq, isNull, lt } from "drizzle-orm";
+import { and, eq, isNull, lt, exists, sql } from "drizzle-orm";
 import { db } from "../db/index";
 import { pushSubscriptions } from "../db/schema/index.schema";
+import { tasks } from "../db/schema/tasks.schema";
 import type { PushSubscribeInput } from "../validators/push.validator";
 
 webpush.setVapidDetails(
@@ -48,10 +49,6 @@ export const pushService = {
     return { message: "Unsubscribed" };
   },
 
-  /**
-   * Called from the login flow. Makes the device row follow the
-   * last user who logged in and resets the inactivity cycle.
-   */
   async touchLogin(deviceId: string, userId: string) {
     await db
       .update(pushSubscriptions)
@@ -71,8 +68,16 @@ export const pushService = {
       where: and(
         lt(pushSubscriptions.lastLoginAt, cutoff),
         isNull(pushSubscriptions.lastNotifiedAt),
+        // Only notify if the user has at least one task assigned
+        exists(
+          db
+            .select({ one: sql`1` })
+            .from(tasks)
+            .where(eq(tasks.assigneeId, pushSubscriptions.userId)),
+        ),
       ),
     });
+
     console.log("push job: matched rows =", rows.length);
 
     for (const r of rows) {
@@ -92,8 +97,12 @@ export const pushService = {
           .set({ lastNotifiedAt: new Date() })
           .where(eq(pushSubscriptions.id, r.id));
       } catch (err: any) {
-        console.error("push job: failed", r.id, err?.statusCode, err?.body ?? err);
-        // Subscription expired or revoked by the browser
+        console.error(
+          "push job: failed",
+          r.id,
+          err?.statusCode,
+          err?.body ?? err,
+        );
         if (err?.statusCode === 404 || err?.statusCode === 410) {
           await db
             .delete(pushSubscriptions)
