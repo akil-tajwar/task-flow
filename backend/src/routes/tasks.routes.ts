@@ -25,6 +25,7 @@ tasksRoutes.patch("/blocked/:id", taskController.blocked);
 // =========================================================
 tasksRoutes.post("/progress/create", taskController.addProgress);
 tasksRoutes.get("/progress/getAll/:taskId", taskController.getTaskProgress);
+tasksRoutes.get("/calendar/:id", taskController.downloadTaskIcs);
 
 // =========================================================
 // DEPENDENCIES

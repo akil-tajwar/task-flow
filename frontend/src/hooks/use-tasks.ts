@@ -192,6 +192,38 @@ export function useAddTaskProgress(taskId: string) {
   });
 }
 
+// ---- Calendar (.ics) ----
+// Downloads an .ics file for a single task. Uses fetch + Blob instead of a
+// plain <a href> so the Authorization header from `api` is included — a raw
+// navigation wouldn't carry the Bearer token.
+
+export function useDownloadTaskIcs() {
+  return useMutation({
+    mutationFn: async (task: { id: string; title: string }) => {
+      const res = await api.get(`/tasks/calendar/${task.id}`, {
+        responseType: "blob",
+      });
+
+      const blob = new Blob([res.data], { type: "text/calendar" });
+      const url = URL.createObjectURL(blob);
+
+      const safeName =
+        task.title
+          .replace(/[^a-zA-Z0-9-_ ]/g, "")
+          .trim()
+          .replace(/\s+/g, "-") || "task";
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${safeName}.ics`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    },
+  });
+}
+
 // ---- Review queue ----
 // /tasks/getInReview is a DIFFERENT shape from /tasks/getAll: it's always
 // paginated ({ data, pagination }), it always filters status="in_review"
@@ -276,7 +308,6 @@ export function useDeleteComment(taskId: string) {
       qc.invalidateQueries({ queryKey: ["task-comments", taskId] }),
   });
 }
-
 
 // "use client";
 
@@ -510,4 +541,3 @@ export function useDeleteComment(taskId: string) {
 //       qc.invalidateQueries({ queryKey: ["task-comments", taskId] }),
 //   });
 // }
-

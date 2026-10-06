@@ -240,6 +240,26 @@ export const taskController = {
     return c.json(result);
   },
 
+  async downloadTaskIcs(c: Context) {
+    const currentUser = c.get("user");
+    const id = c.req.param("id");
+
+    if (!id) {
+      return c.json({ error: "Task ID is required" }, 400);
+    }
+
+    const { ics, filename } = await taskService.getTaskIcs(
+      currentUser.tenantId,
+      id,
+    );
+
+    return c.body(ics, 200, {
+      "Content-Type": "text/calendar; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Cache-Control": "no-store",
+    });
+  },
+
   // =========================================================
   // DEPENDENCIES
   // =========================================================

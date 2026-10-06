@@ -9,6 +9,7 @@ import {
 import { sql } from "drizzle-orm";
 import { taskProgress, projects } from "../db/schema/index.schema";
 import type { NewTask, Comment } from "../validators/tasks.validator";
+import { buildTaskIcs, icsFilename } from "../lib/ics";
 
 export const taskService = {
   // =========================================================
@@ -565,6 +566,35 @@ export const taskService = {
       ),
       orderBy: [desc(taskProgress.startedAt)],
     });
+  },
+
+  async getTaskIcs(tenantId: string, taskId: string) {
+    const task = await db.query.tasks.findFirst({
+      where: and(eq(tasks.id, taskId), eq(tasks.tenantId, tenantId)),
+    });
+
+    if (!task) {
+      throw new Error("Task not found");
+    }
+
+    const project = await db.query.projects.findFirst({
+      where: eq(projects.id, task.projectId),
+      columns: { name: true },
+    });
+
+    const ics = buildTaskIcs({
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      startDate: task.startDate,
+      dueDate: task.dueDate,
+      projectName: project?.name ?? null,
+    });
+
+    return {
+      ics,
+      filename: icsFilename(task.title),
+    };
   },
 
   // =========================================================
