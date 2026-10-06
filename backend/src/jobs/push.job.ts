@@ -5,7 +5,7 @@ export function startPushJobs() {
   console.log("push jobs: scheduler started");
 
   cron.schedule(
-    "0 9 * * *", // for testing: every minute. Change to "* * * * *"
+    "0 9 * * *", // daily at 9 AM Asia/Dhaka
     () =>
       pushService
         .sendInactivityReminders()
