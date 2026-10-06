@@ -170,11 +170,6 @@ export const authService = {
             userAgent: meta?.ua ?? null,
           })
         : Promise.resolve(),
-      meta?.deviceId
-        ? pushService
-            .unsubscribe(meta.deviceId, userId)
-            .catch((e) => console.error(e))
-        : Promise.resolve(),
     ]);
   },
 
