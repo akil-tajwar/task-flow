@@ -6,11 +6,11 @@ import { TaskProgressModal } from "./task-progress-modal";
 import { useDownloadTaskIcs } from "@/hooks/use-tasks";
 import {
   Clock,
-  Eye,
   Pencil,
   Trash2,
   CalendarPlus,
   Loader2,
+  MoreVertical,
 } from "lucide-react";
 import {
   Tooltip,
@@ -18,6 +18,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 // No "todo" status on the backend — a task is created straight into
 // "in_progress" and only ever moves between in_progress / in_review /
@@ -186,8 +192,8 @@ export function TaskTable({
                 <tr key={t.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4 max-w-xs">
                     <p
-                      className="text-sm font-medium text-gray-900 hover:text-indigo-600 cursor-pointer truncate"
                       onClick={() => onView(t)}
+                      className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline cursor-pointer truncate"
                     >
                       {t.title}
                     </p>
@@ -223,48 +229,6 @@ export function TaskTable({
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <ActionButton
-                        label={
-                          !canLogProgress
-                            ? "Progress can only be logged while a task is In Progress or Blocked"
-                            : "Log Progress"
-                        }
-                        onClick={() => canLogProgress && setLogging(t)}
-                        disabled={!canLogProgress}
-                        className={
-                          !canLogProgress
-                            ? "text-gray-800"
-                            : "text-purple-600 hover:text-purple-800 hover:bg-purple-50"
-                        }
-                      >
-                        <Clock className="h-4 w-4" />
-                      </ActionButton>
-
-                      <ActionButton
-                        label={
-                          isDownloading ? "Downloading…" : "Add to Calendar"
-                        }
-                        onClick={() =>
-                          downloadIcs.mutate({ id: t.id, title: t.title })
-                        }
-                        disabled={isDownloading}
-                        className="text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50"
-                      >
-                        {isDownloading ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <CalendarPlus className="h-4 w-4" />
-                        )}
-                      </ActionButton>
-
-                      <ActionButton
-                        label="View"
-                        onClick={() => onView(t)}
-                        className="text-gray-500 hover:text-gray-800 hover:bg-gray-100"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </ActionButton>
-
-                      <ActionButton
                         label="Edit"
                         onClick={() => onEdit(t)}
                         className="text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50"
@@ -284,6 +248,59 @@ export function TaskTable({
                           <Trash2 className="h-4 w-4" />
                         )}
                       </ActionButton>
+
+                      <DropdownMenu>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                type="button"
+                                aria-label="More actions"
+                                className="p-1.5 rounded-md text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </button>
+                            </DropdownMenuTrigger>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">
+                            <p>More actions</p>
+                          </TooltipContent>
+                        </Tooltip>
+
+                        <DropdownMenuContent
+                          align="end"
+                          className="w-48 bg-white text-zinc-900 border-zinc-200 dark:bg-white dark:text-zinc-900 dark:border-zinc-200"
+                        >
+                          <DropdownMenuItem
+                            disabled={!canLogProgress}
+                            onClick={() => {
+                              if (canLogProgress) setLogging(t);
+                            }}
+                            className={`cursor-pointer dark:focus:bg-zinc-100 dark:focus:text-zinc-900 ${!canLogProgress ? "bg-gray-200" : ""}`}
+                          >
+                            <Clock className="h-4 w-4 mr-2 text-purple-600" />
+                            Log Progress
+                          </DropdownMenuItem>
+
+                          <DropdownMenuItem
+                            disabled={isDownloading}
+                            onClick={() =>
+                              downloadIcs.mutate({
+                                id: t.id,
+                                title: t.title,
+                              })
+                            }
+                            className="cursor-pointer dark:focus:bg-zinc-100 dark:focus:text-zinc-900"
+                          >
+                            {isDownloading ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin text-emerald-600" />
+                            ) : (
+                              <CalendarPlus className="h-4 w-4 mr-2 text-emerald-600" />
+                            )}
+                            {isDownloading ? "Downloading…" : "Add to Calendar"}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </td>
                 </tr>
