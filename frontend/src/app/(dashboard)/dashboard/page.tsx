@@ -8,730 +8,18 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  useDashboard,
+  RANGES,
+  type Range,
+  type Priority,
+  type RangeData,
+} from "@/hooks/use-dashboard";
+import { useMe } from "@/hooks/use-auth";
 
-// ─── Types (swap DEMO for your API response later) ────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-type Priority = "urgent" | "high" | "medium" | "low";
-
-const RANGES = ["1W", "1M", "3M", "6M", "1Y"] as const;
-type Range = (typeof RANGES)[number];
-
-/** Everything that depends on the selected date range */
-interface RangeData {
-  kpis: {
-    activeProjects: number;
-    activeProjectsDelta: number;
-    onHold: number;
-    openTasks: number;
-    completionRate: number;
-    inReview: number;
-    overdueTasks: number;
-    overdueDelta: number;
-    urgentOverdue: number;
-  };
-  activity: Array<{ label: string; created: number; completed: number }>;
-  statusBreakdown: Array<{
-    key: "in_progress" | "in_review" | "done" | "blocked";
-    count: number;
-  }>;
-  priorityBreakdown: Array<{ key: Priority; count: number }>;
-  dueLoad: Array<{ label: string; due: number }>;
-  team: Array<{
-    name: string;
-    assigned: number; // tasks assigned in range
-    completed: number; // isCompleted = true
-    onTime: number; // completedAt <= dueDate
-    late: number; // completedAt >  dueDate
-    overdue: number; // still open and past dueDate
-    estHours: number; // sum estimatedHours
-    actualHours: number; // sum actualHours
-  }>;
-}
-
-interface DashboardData {
-  byRange: Record<Range, RangeData>;
-  projects: Array<{
-    id: string;
-    name: string;
-    client: string;
-    progress: number;
-    budgetUsed: number;
-  }>;
-  review: Array<{
-    id: string;
-    title: string;
-    project: string;
-    by: string;
-    when: string;
-    priority: Priority;
-  }>;
-  dueSoon: Array<{
-    id: string;
-    title: string;
-    due: string;
-    inDays: number;
-    priority: Priority;
-  }>;
-  recent: Array<{
-    id: string;
-    user: string;
-    action: string;
-    target: string;
-    when: string;
-  }>;
-}
-
-// Demo generator: one row per day, ending today (swap for your API rows)
-function makeDailyActivity(days: number, seed: number) {
-  let st = seed;
-  const rnd = () =>
-    (st = (st * 1664525 + 1013904223) % 4294967296) / 4294967296;
-  const end = new Date(2026, 9, 11);
-  return Array.from({ length: days }, (_, i) => {
-    const d = new Date(end);
-    d.setDate(end.getDate() - (days - 1 - i));
-    const weekend = d.getDay() === 5 || d.getDay() === 6; // Fri / Sat
-    const base = weekend ? 1 : 6;
-    return {
-      label: d.toLocaleDateString("en", { month: "short", day: "numeric" }),
-      created: Math.round(base + rnd() * 5),
-      completed: Math.round(base + rnd() * 5),
-    };
-  });
-}
-
-// ─── Demo data ────────────────────────────────────────────────────────────────
-
-const DEMO: DashboardData = {
-  byRange: {
-    "1W": {
-      kpis: {
-        activeProjects: 12,
-        activeProjectsDelta: 1,
-        onHold: 3,
-        openTasks: 148,
-        completionRate: 71,
-        inReview: 23,
-        overdueTasks: 9,
-        overdueDelta: 1,
-        urgentOverdue: 2,
-      },
-      activity: makeDailyActivity(7, 1),
-      statusBreakdown: [
-        { key: "in_progress", count: 16 },
-        { key: "in_review", count: 6 },
-        { key: "done", count: 13 },
-        { key: "blocked", count: 2 },
-      ],
-      priorityBreakdown: [
-        { key: "urgent", count: 2 },
-        { key: "high", count: 8 },
-        { key: "medium", count: 17 },
-        { key: "low", count: 10 },
-      ],
-      dueLoad: [
-        { label: "Oct 5", due: 3 },
-        { label: "Oct 6", due: 5 },
-        { label: "Oct 7", due: 3 },
-        { label: "Oct 8", due: 8 },
-        { label: "Oct 9", due: 2 },
-        { label: "Oct 10", due: 3 },
-        { label: "Oct 11", due: 5 },
-      ],
-      team: [
-        {
-          name: "Nadia Rahman",
-          assigned: 10,
-          completed: 9,
-          onTime: 8,
-          late: 1,
-          overdue: 0,
-          estHours: 30,
-          actualHours: 28,
-        },
-        {
-          name: "Imran Hossain",
-          assigned: 12,
-          completed: 9,
-          onTime: 7,
-          late: 2,
-          overdue: 1,
-          estHours: 38,
-          actualHours: 43,
-        },
-        {
-          name: "Sara Khan",
-          assigned: 8,
-          completed: 6,
-          onTime: 6,
-          late: 0,
-          overdue: 0,
-          estHours: 22,
-          actualHours: 21,
-        },
-        {
-          name: "Tanvir Ahmed",
-          assigned: 11,
-          completed: 9,
-          onTime: 7,
-          late: 2,
-          overdue: 1,
-          estHours: 35,
-          actualHours: 40,
-        },
-        {
-          name: "Farhana Islam",
-          assigned: 6,
-          completed: 5,
-          onTime: 5,
-          late: 0,
-          overdue: 0,
-          estHours: 15,
-          actualHours: 14,
-        },
-      ],
-    },
-    "1M": {
-      kpis: {
-        activeProjects: 12,
-        activeProjectsDelta: 2,
-        onHold: 3,
-        openTasks: 148,
-        completionRate: 62,
-        inReview: 23,
-        overdueTasks: 9,
-        overdueDelta: 3,
-        urgentOverdue: 2,
-      },
-      activity: makeDailyActivity(30, 2),
-      statusBreakdown: [
-        { key: "in_progress", count: 64 },
-        { key: "in_review", count: 23 },
-        { key: "done", count: 52 },
-        { key: "blocked", count: 9 },
-      ],
-      priorityBreakdown: [
-        { key: "urgent", count: 6 },
-        { key: "high", count: 31 },
-        { key: "medium", count: 72 },
-        { key: "low", count: 39 },
-      ],
-      dueLoad: [
-        { label: "Sep 12", due: 6 },
-        { label: "Sep 13", due: 8 },
-        { label: "Sep 14", due: 4 },
-        { label: "Sep 15", due: 10 },
-        { label: "Sep 16", due: 3 },
-        { label: "Sep 17", due: 11 },
-        { label: "Sep 18", due: 6 },
-        { label: "Sep 19", due: 10 },
-        { label: "Sep 20", due: 4 },
-        { label: "Sep 21", due: 3 },
-        { label: "Sep 22", due: 11 },
-        { label: "Sep 23", due: 11 },
-        { label: "Sep 24", due: 5 },
-        { label: "Sep 25", due: 7 },
-        { label: "Sep 26", due: 3 },
-        { label: "Sep 27", due: 10 },
-        { label: "Sep 28", due: 3 },
-        { label: "Sep 29", due: 11 },
-        { label: "Sep 30", due: 2 },
-        { label: "Oct 1", due: 11 },
-        { label: "Oct 2", due: 5 },
-        { label: "Oct 3", due: 9 },
-        { label: "Oct 4", due: 10 },
-        { label: "Oct 5", due: 8 },
-        { label: "Oct 6", due: 7 },
-        { label: "Oct 7", due: 9 },
-        { label: "Oct 8", due: 11 },
-        { label: "Oct 9", due: 9 },
-        { label: "Oct 10", due: 7 },
-        { label: "Oct 11", due: 6 },
-      ],
-      team: [
-        {
-          name: "Nadia Rahman",
-          assigned: 42,
-          completed: 36,
-          onTime: 31,
-          late: 5,
-          overdue: 2,
-          estHours: 120,
-          actualHours: 112,
-        },
-        {
-          name: "Imran Hossain",
-          assigned: 48,
-          completed: 35,
-          onTime: 26,
-          late: 9,
-          overdue: 4,
-          estHours: 150,
-          actualHours: 171,
-        },
-        {
-          name: "Sara Khan",
-          assigned: 30,
-          completed: 26,
-          onTime: 24,
-          late: 2,
-          overdue: 1,
-          estHours: 90,
-          actualHours: 84,
-        },
-        {
-          name: "Tanvir Ahmed",
-          assigned: 45,
-          completed: 36,
-          onTime: 28,
-          late: 8,
-          overdue: 3,
-          estHours: 140,
-          actualHours: 158,
-        },
-        {
-          name: "Farhana Islam",
-          assigned: 22,
-          completed: 20,
-          onTime: 19,
-          late: 1,
-          overdue: 0,
-          estHours: 60,
-          actualHours: 55,
-        },
-      ],
-    },
-    "3M": {
-      kpis: {
-        activeProjects: 12,
-        activeProjectsDelta: 3,
-        onHold: 3,
-        openTasks: 148,
-        completionRate: 66,
-        inReview: 23,
-        overdueTasks: 9,
-        overdueDelta: 4,
-        urgentOverdue: 2,
-      },
-      activity: makeDailyActivity(90, 3),
-      statusBreakdown: [
-        { key: "in_progress", count: 179 },
-        { key: "in_review", count: 64 },
-        { key: "done", count: 146 },
-        { key: "blocked", count: 25 },
-      ],
-      priorityBreakdown: [
-        { key: "urgent", count: 17 },
-        { key: "high", count: 87 },
-        { key: "medium", count: 201 },
-        { key: "low", count: 109 },
-      ],
-      dueLoad: [
-        { label: "Jul 19", due: 32 },
-        { label: "Jul 26", due: 44 },
-        { label: "Aug 2", due: 33 },
-        { label: "Aug 9", due: 41 },
-        { label: "Aug 16", due: 37 },
-        { label: "Aug 23", due: 40 },
-        { label: "Aug 30", due: 36 },
-        { label: "Sep 6", due: 24 },
-        { label: "Sep 13", due: 24 },
-        { label: "Sep 20", due: 30 },
-        { label: "Sep 27", due: 37 },
-        { label: "Oct 4", due: 44 },
-        { label: "Oct 11", due: 43 },
-      ],
-      team: [
-        {
-          name: "Nadia Rahman",
-          assigned: 118,
-          completed: 101,
-          onTime: 87,
-          late: 14,
-          overdue: 3,
-          estHours: 336,
-          actualHours: 314,
-        },
-        {
-          name: "Imran Hossain",
-          assigned: 134,
-          completed: 98,
-          onTime: 73,
-          late: 25,
-          overdue: 6,
-          estHours: 420,
-          actualHours: 479,
-        },
-        {
-          name: "Sara Khan",
-          assigned: 84,
-          completed: 73,
-          onTime: 67,
-          late: 6,
-          overdue: 2,
-          estHours: 252,
-          actualHours: 235,
-        },
-        {
-          name: "Tanvir Ahmed",
-          assigned: 126,
-          completed: 101,
-          onTime: 79,
-          late: 22,
-          overdue: 4,
-          estHours: 392,
-          actualHours: 442,
-        },
-        {
-          name: "Farhana Islam",
-          assigned: 62,
-          completed: 56,
-          onTime: 53,
-          late: 3,
-          overdue: 0,
-          estHours: 168,
-          actualHours: 154,
-        },
-      ],
-    },
-    "6M": {
-      kpis: {
-        activeProjects: 12,
-        activeProjectsDelta: 5,
-        onHold: 3,
-        openTasks: 148,
-        completionRate: 64,
-        inReview: 23,
-        overdueTasks: 9,
-        overdueDelta: 2,
-        urgentOverdue: 2,
-      },
-      activity: makeDailyActivity(180, 4),
-      statusBreakdown: [
-        { key: "in_progress", count: 333 },
-        { key: "in_review", count: 120 },
-        { key: "done", count: 270 },
-        { key: "blocked", count: 47 },
-      ],
-      priorityBreakdown: [
-        { key: "urgent", count: 31 },
-        { key: "high", count: 161 },
-        { key: "medium", count: 375 },
-        { key: "low", count: 203 },
-      ],
-      dueLoad: [
-        { label: "Apr 19", due: 26 },
-        { label: "Apr 26", due: 45 },
-        { label: "May 3", due: 35 },
-        { label: "May 10", due: 44 },
-        { label: "May 17", due: 40 },
-        { label: "May 24", due: 42 },
-        { label: "May 31", due: 32 },
-        { label: "Jun 7", due: 27 },
-        { label: "Jun 14", due: 23 },
-        { label: "Jun 21", due: 29 },
-        { label: "Jun 28", due: 27 },
-        { label: "Jul 5", due: 32 },
-        { label: "Jul 12", due: 32 },
-        { label: "Jul 19", due: 18 },
-        { label: "Jul 26", due: 49 },
-        { label: "Aug 2", due: 29 },
-        { label: "Aug 9", due: 34 },
-        { label: "Aug 16", due: 36 },
-        { label: "Aug 23", due: 18 },
-        { label: "Aug 30", due: 27 },
-        { label: "Sep 6", due: 44 },
-        { label: "Sep 13", due: 41 },
-        { label: "Sep 20", due: 38 },
-        { label: "Sep 27", due: 26 },
-        { label: "Oct 4", due: 50 },
-        { label: "Oct 11", due: 21 },
-      ],
-      team: [
-        {
-          name: "Nadia Rahman",
-          assigned: 218,
-          completed: 187,
-          onTime: 161,
-          late: 26,
-          overdue: 3,
-          estHours: 624,
-          actualHours: 582,
-        },
-        {
-          name: "Imran Hossain",
-          assigned: 250,
-          completed: 182,
-          onTime: 135,
-          late: 47,
-          overdue: 6,
-          estHours: 780,
-          actualHours: 889,
-        },
-        {
-          name: "Sara Khan",
-          assigned: 156,
-          completed: 135,
-          onTime: 125,
-          late: 10,
-          overdue: 2,
-          estHours: 468,
-          actualHours: 437,
-        },
-        {
-          name: "Tanvir Ahmed",
-          assigned: 234,
-          completed: 187,
-          onTime: 145,
-          late: 42,
-          overdue: 4,
-          estHours: 728,
-          actualHours: 822,
-        },
-        {
-          name: "Farhana Islam",
-          assigned: 114,
-          completed: 104,
-          onTime: 99,
-          late: 5,
-          overdue: 0,
-          estHours: 312,
-          actualHours: 286,
-        },
-      ],
-    },
-    "1Y": {
-      kpis: {
-        activeProjects: 12,
-        activeProjectsDelta: 8,
-        onHold: 3,
-        openTasks: 148,
-        completionRate: 68,
-        inReview: 23,
-        overdueTasks: 9,
-        overdueDelta: 5,
-        urgentOverdue: 2,
-      },
-      activity: makeDailyActivity(365, 5),
-      statusBreakdown: [
-        { key: "in_progress", count: 640 },
-        { key: "in_review", count: 230 },
-        { key: "done", count: 520 },
-        { key: "blocked", count: 90 },
-      ],
-      priorityBreakdown: [
-        { key: "urgent", count: 60 },
-        { key: "high", count: 310 },
-        { key: "medium", count: 720 },
-        { key: "low", count: 390 },
-      ],
-      dueLoad: [
-        { label: "Nov '25", due: 76 },
-        { label: "Dec '25", due: 83 },
-        { label: "Jan '26", due: 70 },
-        { label: "Feb '26", due: 142 },
-        { label: "Mar '26", due: 89 },
-        { label: "Apr '26", due: 138 },
-        { label: "May '26", due: 82 },
-        { label: "Jun '26", due: 116 },
-        { label: "Jul '26", due: 148 },
-        { label: "Aug '26", due: 73 },
-        { label: "Sep '26", due: 79 },
-        { label: "Oct '26", due: 96 },
-      ],
-      team: [
-        {
-          name: "Nadia Rahman",
-          assigned: 420,
-          completed: 360,
-          onTime: 310,
-          late: 50,
-          overdue: 3,
-          estHours: 1200,
-          actualHours: 1120,
-        },
-        {
-          name: "Imran Hossain",
-          assigned: 480,
-          completed: 350,
-          onTime: 260,
-          late: 90,
-          overdue: 6,
-          estHours: 1500,
-          actualHours: 1710,
-        },
-        {
-          name: "Sara Khan",
-          assigned: 300,
-          completed: 260,
-          onTime: 240,
-          late: 20,
-          overdue: 2,
-          estHours: 900,
-          actualHours: 840,
-        },
-        {
-          name: "Tanvir Ahmed",
-          assigned: 450,
-          completed: 360,
-          onTime: 280,
-          late: 80,
-          overdue: 4,
-          estHours: 1400,
-          actualHours: 1580,
-        },
-        {
-          name: "Farhana Islam",
-          assigned: 220,
-          completed: 200,
-          onTime: 190,
-          late: 10,
-          overdue: 0,
-          estHours: 600,
-          actualHours: 550,
-        },
-      ],
-    },
-  },
-  projects: [
-    {
-      id: "p1",
-      name: "Riverside Brand Refresh",
-      client: "Northwind Co.",
-      progress: 78,
-      budgetUsed: 64,
-    },
-    {
-      id: "p2",
-      name: "E-commerce Migration",
-      client: "Bluepeak Retail",
-      progress: 45,
-      budgetUsed: 82,
-    },
-    {
-      id: "p3",
-      name: "Mobile App v2",
-      client: "Kestrel Health",
-      progress: 31,
-      budgetUsed: 28,
-    },
-    {
-      id: "p4",
-      name: "Annual Report Design",
-      client: "Harbor Capital",
-      progress: 92,
-      budgetUsed: 90,
-    },
-  ],
-  review: [
-    {
-      id: "r1",
-      title: "Homepage hero mockup v3",
-      project: "Riverside Brand Refresh",
-      by: "Nadia Rahman",
-      when: "2h ago",
-      priority: "high",
-    },
-    {
-      id: "r2",
-      title: "Checkout flow QA sign-off",
-      project: "E-commerce Migration",
-      by: "Imran Hossain",
-      when: "5h ago",
-      priority: "urgent",
-    },
-    {
-      id: "r3",
-      title: "Onboarding copy",
-      project: "Mobile App v2",
-      by: "Sara Khan",
-      when: "Yesterday",
-      priority: "medium",
-    },
-    {
-      id: "r4",
-      title: "Chart palette proof",
-      project: "Annual Report Design",
-      by: "Tanvir Ahmed",
-      when: "Yesterday",
-      priority: "low",
-    },
-  ],
-  dueSoon: [
-    {
-      id: "d1",
-      title: "Submit staging build",
-      due: "Oct 1",
-      inDays: 1,
-      priority: "urgent",
-    },
-    {
-      id: "d2",
-      title: "Client feedback round 2",
-      due: "Oct 2",
-      inDays: 2,
-      priority: "high",
-    },
-    {
-      id: "d3",
-      title: "Invoice #INV-0142 follow-up",
-      due: "Oct 3",
-      inDays: 3,
-      priority: "medium",
-    },
-    {
-      id: "d4",
-      title: "Sprint planning doc",
-      due: "Oct 5",
-      inDays: 5,
-      priority: "low",
-    },
-    {
-      id: "d5",
-      title: "Q4 retainer renewal",
-      due: "Oct 6",
-      inDays: 6,
-      priority: "medium",
-    },
-  ],
-  recent: [
-    {
-      id: "a1",
-      user: "Nadia Rahman",
-      action: "completed",
-      target: "Logo lockup exports",
-      when: "12m ago",
-    },
-    {
-      id: "a2",
-      user: "Imran Hossain",
-      action: "moved to review",
-      target: "Checkout flow QA",
-      when: "1h ago",
-    },
-    {
-      id: "a3",
-      user: "Sara Khan",
-      action: "commented on",
-      target: "Onboarding copy",
-      when: "3h ago",
-    },
-    {
-      id: "a4",
-      user: "System",
-      action: "marked overdue",
-      target: "INV-0139 · Bluepeak Retail",
-      when: "5h ago",
-    },
-    {
-      id: "a5",
-      user: "Tanvir Ahmed",
-      action: "logged 3.5h on",
-      target: "Chart palette proof",
-      when: "Yesterday",
-    },
-  ],
-};
+type Role = "admin" | "user" | "client";
 
 // ─── Formatters & maps ────────────────────────────────────────────────────────
 
@@ -913,7 +201,7 @@ function KpiCard({
   );
 }
 
-// ─── Charts (pure SVG) ────────────────────────────────────────────────────────
+// ─── Charts ───────────────────────────────────────────────────────────────────
 
 function niceScale(rawMax: number) {
   const rawStep = rawMax / 4;
@@ -934,6 +222,14 @@ function niceScale(rawMax: number) {
 }
 
 function ActivityChart({ data }: { data: RangeData["activity"] }) {
+  if (!data.length) {
+    return (
+      <div className="h-[250px] flex items-center justify-center text-xs text-gray-400">
+        No activity in this range
+      </div>
+    );
+  }
+
   const W = 900,
     H = 250,
     L = 34,
@@ -948,7 +244,7 @@ function ActivityChart({ data }: { data: RangeData["activity"] }) {
   const line = (k: "created" | "completed") =>
     data.map((d, i) => `${i ? "L" : "M"}${x(i)} ${y(d[k])}`).join(" ");
   const area = `${line("completed")} L${x(data.length - 1)} ${H - B} L${x(0)} ${H - B}Z`;
-  const every = Math.ceil(data.length / 10); // ~10 date labels on the axis
+  const every = Math.ceil(data.length / 10);
   const step = (W - L - R) / Math.max(data.length - 1, 1);
   const showDots = data.length <= 31;
 
@@ -1022,7 +318,6 @@ function ActivityChart({ data }: { data: RangeData["activity"] }) {
             />
           ))}
       </svg>
-      {/* one hover column per day (shadcn tooltip) */}
       {data.map((d, i) => {
         const l = Math.max(L, x(i) - step / 2);
         const r = Math.min(W - R, x(i) + step / 2);
@@ -1053,9 +348,31 @@ function ActivityChart({ data }: { data: RangeData["activity"] }) {
 
 function StatusDonut({ data }: { data: RangeData["statusBreakdown"] }) {
   const total = data.reduce((s, d) => s + d.count, 0);
-  const r = 52,
-    cf = 2 * Math.PI * r;
-  let offset = 0;
+
+  if (total === 0) {
+    return (
+      <div className="h-[140px] w-[140px] flex-shrink-0 flex items-center justify-center text-xs text-gray-400">
+        No tasks
+      </div>
+    );
+  }
+
+  const r = 52;
+  let cumulative = 0;
+  const arcs = data
+    .filter((d) => d.count > 0)
+    .map((d) => {
+      const fraction = d.count / total;
+      const arc = {
+        key: d.key,
+        color: STATUS_CFG[d.key].color,
+        fraction,
+        offset: cumulative,
+      };
+      cumulative += fraction;
+      return arc;
+    });
+
   return (
     <svg
       viewBox="0 0 140 140"
@@ -1064,24 +381,29 @@ function StatusDonut({ data }: { data: RangeData["statusBreakdown"] }) {
       aria-label="Tasks by status"
     >
       <g transform="rotate(-90 70 70)">
-        {data.map((d) => {
-          const len = (d.count / total) * cf;
-          const el = (
-            <circle
-              key={d.key}
-              cx={70}
-              cy={70}
-              r={r}
-              fill="none"
-              stroke={STATUS_CFG[d.key].color}
-              strokeWidth={16}
-              strokeDasharray={`${len - 2} ${cf - len + 2}`}
-              strokeDashoffset={-offset}
-            />
-          );
-          offset += len;
-          return el;
-        })}
+        <circle
+          cx={70}
+          cy={70}
+          r={r}
+          fill="none"
+          stroke="#f1f5f9"
+          strokeWidth={16}
+        />
+        {arcs.map((a) => (
+          <circle
+            key={a.key}
+            cx={70}
+            cy={70}
+            r={r}
+            fill="none"
+            stroke={a.color}
+            strokeWidth={16}
+            pathLength={1}
+            strokeDasharray={`${a.fraction} ${1 - a.fraction}`}
+            strokeDashoffset={-a.offset}
+            strokeLinecap="butt"
+          />
+        ))}
       </g>
       <text
         x={70}
@@ -1105,6 +427,14 @@ function DueLoadChart({
 }: {
   data: Array<{ label: string; due: number }>;
 }) {
+  if (!data.length) {
+    return (
+      <div className="h-[270px] flex items-center justify-center text-xs text-gray-400">
+        No upcoming deadlines in this range
+      </div>
+    );
+  }
+
   const W = 460,
     H = 270,
     L = 44,
@@ -1113,7 +443,6 @@ function DueLoadChart({
     B = 50;
   const COLOR = "#0d9488";
 
-  // nice y-axis steps
   const rawMax = Math.max(...data.map((d) => d.due), 1);
   const rawStep = rawMax / 4;
   const mag = 10 ** Math.floor(Math.log10(rawStep));
@@ -1132,7 +461,7 @@ function DueLoadChart({
     .map((d, i) => `${i ? "L" : "M"}${x(i)} ${y(d.due)}`)
     .join(" ");
   const area = `${line} L${x(data.length - 1)} ${H - B} L${x(0)} ${H - B}Z`;
-  const every = Math.ceil(data.length / 7); // keep ~7 date labels
+  const every = Math.ceil(data.length / 7);
   const r = data.length <= 14 ? 3.5 : 2.5;
 
   return (
@@ -1211,7 +540,6 @@ function DueLoadChart({
           Task count
         </text>
       </svg>
-      {/* one hover column per date (shadcn tooltip) */}
       {data.map((d, i) => {
         const step = (W - L - R) / Math.max(data.length - 1, 1);
         const l = Math.max(L, x(i) - step / 2);
@@ -1245,10 +573,18 @@ function DueLoadChart({
 function TeamPerformance({
   team,
   range,
+  role,
 }: {
   team: RangeData["team"];
   range: Range;
+  role: Role;
 }) {
+  const isUser = role === "user";
+  const title = isUser ? "My performance" : "Team performance";
+  const sub = isUser
+    ? `My assigned vs completed, delivery timing and effort · ${range}`
+    : `Assigned vs completed, delivery timing and effort · ${range}`;
+
   const sum = (k: "assigned" | "completed" | "onTime" | "late" | "overdue") =>
     team.reduce((s, m) => s + m[k], 0);
   const totals = {
@@ -1266,8 +602,8 @@ function TeamPerformance({
   return (
     <Card>
       <CardHead
-        title="Team performance"
-        sub={`Assigned vs completed, delivery timing and effort · ${range}`}
+        title={title}
+        sub={sub}
         right={
           <Legend
             items={[
@@ -1279,170 +615,287 @@ function TeamPerformance({
         }
       />
       <div className="overflow-x-auto -mx-2">
-        <table className="w-full min-w-[880px]">
-          <thead>
-            <tr className="border-b border-gray-100">
-              <th className={`${head} text-left`}>Member</th>
-              <th className={`${head} text-right`}>Assigned</th>
-              <th className={`${head} text-right`}>Completed</th>
-              <th className={`${head} text-right`}>On time</th>
-              <th className={`${head} text-right`}>Late</th>
-              <th className={`${head} text-right`}>Overdue</th>
-              <th className={`${head} text-left w-56`}>Delivery</th>
-              <th className={`${head} text-right`}>On-time rate</th>
-              <th className={`${head} text-right`}>Est. vs actual</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {team.map((m) => {
-              const rate = pct(m.onTime, m.completed);
-              const variance =
-                m.estHours > 0
-                  ? Math.round(
-                      ((m.actualHours - m.estHours) / m.estHours) * 100,
-                    )
-                  : 0;
-              const over = variance > 0;
-              return (
-                <tr key={m.name} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-3 py-3">
-                    <div className="flex items-center gap-2.5">
-                      <Avatar name={m.name} />
-                      <span className="text-sm font-semibold text-gray-800">
-                        {m.name}
+        {team.length === 0 ? (
+          <div className="py-10 text-center text-xs text-gray-400">
+            {isUser
+              ? "No tasks assigned to you in this range"
+              : "No team activity in this range"}
+          </div>
+        ) : (
+          <table className="w-full min-w-[880px]">
+            <thead>
+              <tr className="border-b border-gray-100">
+                <th className={`${head} text-left`}>
+                  {isUser ? "Me" : "Member"}
+                </th>
+                <th className={`${head} text-right`}>Assigned</th>
+                <th className={`${head} text-right`}>Completed</th>
+                <th className={`${head} text-right`}>On time</th>
+                <th className={`${head} text-right`}>Late</th>
+                <th className={`${head} text-right`}>Overdue</th>
+                <th className={`${head} text-left w-56`}>Delivery</th>
+                <th className={`${head} text-right`}>On-time rate</th>
+                <th className={`${head} text-right`}>Est. vs actual</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {team.map((m) => {
+                const rate = pct(m.onTime, m.completed);
+                const variance =
+                  m.estHours > 0
+                    ? Math.round(
+                        ((m.actualHours - m.estHours) / m.estHours) * 100,
+                      )
+                    : 0;
+                const over = variance > 0;
+                return (
+                  <tr
+                    key={m.name}
+                    className="hover:bg-gray-50 transition-colors"
+                  >
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <Avatar name={m.name} />
+                        <span className="text-sm font-semibold text-gray-800">
+                          {m.name}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-right text-sm font-bold text-gray-900">
+                      {m.assigned}
+                    </td>
+                    <td className="px-3 py-3 text-right text-sm text-gray-600">
+                      <span className="font-bold text-gray-900">
+                        {m.completed}
                       </span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-3 text-right text-sm font-bold text-gray-900">
-                    {m.assigned}
-                  </td>
-                  <td className="px-3 py-3 text-right text-sm text-gray-600">
-                    <span className="font-bold text-gray-900">
-                      {m.completed}
-                    </span>
-                    <span className="text-xs text-gray-400 ml-1">
-                      ({pct(m.completed, m.assigned)}%)
-                    </span>
-                  </td>
-                  <td className="px-3 py-3 text-right text-sm font-semibold text-emerald-600">
-                    {m.onTime}
-                  </td>
-                  <td className="px-3 py-3 text-right text-sm font-semibold text-amber-600">
-                    {m.late}
-                  </td>
-                  <td className="px-3 py-3 text-right">
-                    {m.overdue > 0 ? (
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-600">
-                        {m.overdue}
+                      <span className="text-xs text-gray-400 ml-1">
+                        ({pct(m.completed, m.assigned)}%)
                       </span>
-                    ) : (
-                      <span className="text-sm text-gray-300">0</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-3">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex h-2 rounded-full overflow-hidden bg-gray-100 cursor-pointer">
-                          <div
-                            className="bg-emerald-500"
-                            style={{
-                              width: `${(m.onTime / m.assigned) * 100}%`,
-                            }}
-                          />
-                          <div
-                            className="bg-amber-400"
-                            style={{ width: `${(m.late / m.assigned) * 100}%` }}
-                          />
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent side="top">
-                        <p>{m.onTime} on time</p>
-                        <p>{m.late} late</p>
-                        <p>{m.assigned - m.completed} open</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </td>
-                  <td className="px-3 py-3 text-right">
-                    <span
-                      className={`text-sm font-bold ${rate >= 85 ? "text-emerald-600" : rate >= 70 ? "text-amber-600" : "text-red-500"}`}
-                    >
-                      {rate}%
-                    </span>
-                  </td>
-                  <td className="px-3 py-3 text-right">
-                    <p className="text-xs text-gray-500">
-                      {m.actualHours}h / {m.estHours}h
-                    </p>
-                    <span
-                      className={`text-[11px] font-semibold px-1.5 py-0.5 rounded ${
-                        over
-                          ? "bg-red-50 text-red-600"
-                          : "bg-emerald-50 text-emerald-700"
-                      }`}
-                    >
-                      {over ? "+" : ""}
-                      {variance}% {over ? "over" : "under"}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-          <tfoot>
-            <tr className="border-t border-gray-100 bg-gray-50/60">
-              <td className="px-3 py-3 text-xs font-bold text-gray-500 uppercase">
-                Team total
-              </td>
-              <td className="px-3 py-3 text-right text-sm font-black text-gray-900">
-                {totals.assigned}
-              </td>
-              <td className="px-3 py-3 text-right text-sm font-black text-gray-900">
-                {totals.completed}{" "}
-                <span className="text-xs font-medium text-gray-400">
-                  ({pct(totals.completed, totals.assigned)}%)
-                </span>
-              </td>
-              <td className="px-3 py-3 text-right text-sm font-black text-emerald-600">
-                {totals.onTime}
-              </td>
-              <td className="px-3 py-3 text-right text-sm font-black text-amber-600">
-                {totals.late}
-              </td>
-              <td className="px-3 py-3 text-right text-sm font-black text-red-500">
-                {totals.overdue}
-              </td>
-              <td />
-              <td className="px-3 py-3 text-right text-sm font-black text-gray-900">
-                {pct(totals.onTime, totals.completed)}%
-              </td>
-              <td />
-            </tr>
-          </tfoot>
-        </table>
+                    </td>
+                    <td className="px-3 py-3 text-right text-sm font-semibold text-emerald-600">
+                      {m.onTime}
+                    </td>
+                    <td className="px-3 py-3 text-right text-sm font-semibold text-amber-600">
+                      {m.late}
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      {m.overdue > 0 ? (
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-600">
+                          {m.overdue}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-gray-300">0</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex h-2 rounded-full overflow-hidden bg-gray-100 cursor-pointer">
+                            <div
+                              className="bg-emerald-500"
+                              style={{
+                                width: `${(m.onTime / Math.max(m.assigned, 1)) * 100}%`,
+                              }}
+                            />
+                            <div
+                              className="bg-amber-400"
+                              style={{
+                                width: `${(m.late / Math.max(m.assigned, 1)) * 100}%`,
+                              }}
+                            />
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          <p>{m.onTime} on time</p>
+                          <p>{m.late} late</p>
+                          <p>{m.assigned - m.completed} open</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <span
+                        className={`text-sm font-bold ${rate >= 85 ? "text-emerald-600" : rate >= 70 ? "text-amber-600" : "text-red-500"}`}
+                      >
+                        {rate}%
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <p className="text-xs text-gray-500">
+                        {m.actualHours}h / {m.estHours}h
+                      </p>
+                      <span
+                        className={`text-[11px] font-semibold px-1.5 py-0.5 rounded ${
+                          over
+                            ? "bg-red-50 text-red-600"
+                            : "bg-emerald-50 text-emerald-700"
+                        }`}
+                      >
+                        {over ? "+" : ""}
+                        {variance}% {over ? "over" : "under"}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-gray-100 bg-gray-50/60">
+                <td className="px-3 py-3 text-xs font-bold text-gray-500 uppercase">
+                  {isUser ? "My total" : "Team total"}
+                </td>
+                <td className="px-3 py-3 text-right text-sm font-black text-gray-900">
+                  {totals.assigned}
+                </td>
+                <td className="px-3 py-3 text-right text-sm font-black text-gray-900">
+                  {totals.completed}{" "}
+                  <span className="text-xs font-medium text-gray-400">
+                    ({pct(totals.completed, totals.assigned)}%)
+                  </span>
+                </td>
+                <td className="px-3 py-3 text-right text-sm font-black text-emerald-600">
+                  {totals.onTime}
+                </td>
+                <td className="px-3 py-3 text-right text-sm font-black text-amber-600">
+                  {totals.late}
+                </td>
+                <td className="px-3 py-3 text-right text-sm font-black text-red-500">
+                  {totals.overdue}
+                </td>
+                <td />
+                <td className="px-3 py-3 text-right text-sm font-black text-gray-900">
+                  {pct(totals.onTime, totals.completed)}%
+                </td>
+                <td />
+              </tr>
+            </tfoot>
+          </table>
+        )}
       </div>
     </Card>
+  );
+}
+
+// ─── Loading / Error ──────────────────────────────────────────────────────────
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6 animate-pulse">
+      <div className="flex items-end justify-between gap-4 flex-wrap">
+        <div className="space-y-2">
+          <div className="h-3 w-40 bg-gray-100 rounded" />
+          <div className="h-7 w-56 bg-gray-100 rounded" />
+          <div className="h-3 w-48 bg-gray-100 rounded" />
+        </div>
+        <div className="h-9 w-64 bg-gray-100 rounded-xl" />
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="h-32 bg-gray-100 rounded-2xl" />
+        ))}
+      </div>
+      <div className="h-64 bg-gray-100 rounded-2xl" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 h-80 bg-gray-100 rounded-2xl" />
+        <div className="h-80 bg-gray-100 rounded-2xl" />
+      </div>
+    </div>
+  );
+}
+
+function DashboardError({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-24 text-center">
+      <div className="h-12 w-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center mb-3">
+        <svg
+          className="h-6 w-6"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={1.8}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+          />
+        </svg>
+      </div>
+      <h3 className="text-sm font-bold text-gray-800">
+        Couldn't load the dashboard
+      </h3>
+      <p className="text-xs text-gray-400 mt-1 max-w-sm">{message}</p>
+      <button
+        onClick={onRetry}
+        className="mt-4 px-4 py-2 text-xs font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+      >
+        Try again
+      </button>
+    </div>
   );
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const d = DEMO;
+  const { data: me } = useMe();
+  const { data, isLoading, isError, error, refetch, isFetching } =
+    useDashboard();
   const [range, setRange] = useState<Range>("1M");
-  const cur = d.byRange[range]; // data for the selected range
-  const k = cur.kpis;
+
+  // Normalize role: super_admin behaves as admin on the dashboard
+  const rawRole = me?.role ?? "user";
+  const role: Role = rawRole === "super_admin" ? "admin" : (rawRole as Role);
 
   const now = new Date();
   const hour = now.getHours();
   const greeting =
     hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+
+  if (isLoading) return <DashboardSkeleton />;
+
+  if (isError || !data) {
+    return (
+      <DashboardError
+        message={(error as Error)?.message ?? "Unknown error"}
+        onRetry={() => refetch()}
+      />
+    );
+  }
+
+  const cur = data.byRange[range];
+  const k = cur.kpis;
+
   const maxPriority = Math.max(...cur.priorityBreakdown.map((p) => p.count), 1);
 
-  // On-time delivery, derived from the team data
   const completedAll = cur.team.reduce((s, m) => s + m.completed, 0);
   const onTimeAll = cur.team.reduce((s, m) => s + m.onTime, 0);
   const onTimeRate =
     completedAll > 0 ? Math.round((onTimeAll / completedAll) * 100) : 0;
+
+  // ── Role-based visibility ──
+  const isAdmin = role === "admin";
+  const isUser = role === "user";
+  const isClient = role === "client";
+
+  const showTeamPerformance = isAdmin || isUser; // client: ❌
+  const showDeadlineLoad = isAdmin || isUser; // client: ❌
+  const showProjectHealth = isAdmin || isClient; // user:   ❌
+  const showAllTasksLink = isAdmin || isUser; // client: ❌
+  const showReviewQueueCard = isAdmin || isUser; // client: ❌
+  const showReviewQueueLink = isAdmin || isUser; // client: ❌
+  const showRecentActivity = isAdmin || isUser; // client: ❌
+
+  // Column count for the middle row so client doesn't get empty cells
+  const middleRowCols =
+    (showReviewQueueCard ? 1 : 0) + (showRecentActivity ? 1 : 0) + 1;
+
+  const displayName = me?.name ?? "there";
 
   return (
     <TooltipProvider delayDuration={100}>
@@ -1451,7 +904,7 @@ export default function DashboardPage() {
         <div className="flex items-end justify-between gap-4 flex-wrap">
           <div>
             <p className="text-sm text-gray-400">
-              {greeting}, Akil Tajwar Chowdhury
+              {greeting}, {displayName}
             </p>
             <h1 className="text-2xl font-black text-gray-900 mt-0.5">
               Business Overview
@@ -1463,6 +916,9 @@ export default function DashboardPage() {
                 month: "long",
                 year: "numeric",
               })}
+              {isFetching && (
+                <span className="ml-2 text-indigo-500">· updating…</span>
+              )}
             </p>
           </div>
           <div className="flex bg-white border border-gray-200 rounded-xl p-0.5">
@@ -1523,15 +979,17 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* Team performance */}
-        <TeamPerformance team={cur.team} range={range} />
+        {/* Team / My performance — hidden for client */}
+        {showTeamPerformance && (
+          <TeamPerformance team={cur.team} range={range} role={role} />
+        )}
 
         {/* Activity + status */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <Card className="lg:col-span-2">
             <CardHead
               title="Task activity"
-              sub={`Daily created vs completed · ${range}`}
+              sub={`Created vs completed · ${range}`}
               right={
                 <Legend
                   items={[
@@ -1583,7 +1041,9 @@ export default function DashboardPage() {
                     <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full ${PRIORITY_CFG[p.key].bar}`}
-                        style={{ width: `${(p.count / maxPriority) * 100}%` }}
+                        style={{
+                          width: `${(p.count / maxPriority) * 100}%`,
+                        }}
                       />
                     </div>
                     <span className="font-semibold text-gray-900 text-right">
@@ -1596,23 +1056,39 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Due soon + Review Queue + activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Due soon + Review queue + Recent activity */}
+        <div
+          className={`grid grid-cols-1 gap-4 ${
+            middleRowCols === 3
+              ? "lg:grid-cols-3"
+              : middleRowCols === 2
+                ? "lg:grid-cols-2"
+                : "lg:grid-cols-1"
+          }`}
+        >
+          {/* Due soon */}
           <Card>
             <CardHead
               title="Due soon"
               sub="Next 7 days"
               right={
-                <Link
-                  href="/tasks"
-                  className="text-xs text-indigo-500 hover:text-indigo-700 font-medium"
-                >
-                  All tasks →
-                </Link>
+                showAllTasksLink ? (
+                  <Link
+                    href="/tasks"
+                    className="text-xs text-indigo-500 hover:text-indigo-700 font-medium"
+                  >
+                    All tasks →
+                  </Link>
+                ) : undefined
               }
             />
             <div className="divide-y divide-gray-100">
-              {d.dueSoon.map((t) => (
+              {data.dueSoon.length === 0 && (
+                <p className="py-6 text-xs text-gray-400 text-center">
+                  Nothing due soon
+                </p>
+              )}
+              {data.dueSoon.map((t) => (
                 <div
                   key={t.id}
                   className="py-3 first:pt-0 last:pb-0 flex items-center gap-3"
@@ -1622,7 +1098,8 @@ export default function DashboardPage() {
                       {t.title}
                     </p>
                     <p className="text-xs text-gray-400">
-                      Due {t.due} · in {t.inDays} day{t.inDays !== 1 ? "s" : ""}
+                      Due {t.due} · in {t.inDays} day
+                      {t.inDays !== 1 ? "s" : ""}
                     </p>
                   </div>
                   <PriorityPill p={t.priority} />
@@ -1631,128 +1108,171 @@ export default function DashboardPage() {
             </div>
           </Card>
 
-          <Card>
-            <CardHead
-              title="Review queue"
-              sub="Waiting for your approval"
-              right={
-                <Link
-                  href="/review-queue"
-                  className="text-xs text-indigo-500 hover:text-indigo-700 font-medium"
-                >
-                  Open queue →
-                </Link>
-              }
-            />
-            <div className="divide-y divide-gray-100">
-              {d.review.map((r) => (
-                <div
-                  key={r.id}
-                  className="py-3 first:pt-0 last:pb-0 flex items-center gap-3"
-                >
-                  <Avatar name={r.by} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-800 truncate">
-                      {r.title}
-                    </p>
-                    <p className="text-xs text-gray-400 truncate">
-                      {r.project} · {r.when}
-                    </p>
-                  </div>
-                  <PriorityPill p={r.priority} />
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          <Card>
-            <CardHead title="Recent activity" sub="Across all projects" />
-            <div className="divide-y divide-gray-100">
-              {d.recent.map((a) => (
-                <div
-                  key={a.id}
-                  className="py-3 first:pt-0 last:pb-0 flex items-start gap-3"
-                >
-                  <Avatar name={a.user} />
-                  <div className="min-w-0">
-                    <p className="text-sm text-gray-700">
-                      <span className="font-semibold text-gray-900">
-                        {a.user}
-                      </span>{" "}
-                      {a.action}{" "}
-                      <span className="font-semibold text-gray-900">
-                        {a.target}
-                      </span>
-                    </p>
-                    <p className="text-xs text-gray-400 mt-0.5">{a.when}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </div>
-
-        {/* Deadline load + projects + review */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Card>
-            <CardHead
-              title="Deadline load"
-              sub={`Tasks due by date · ${range}`}
-              right={
-                <Legend items={[{ label: "Tasks due", color: "#0d9488" }]} />
-              }
-            />
-            <DueLoadChart data={cur.dueLoad} />
-          </Card>
-
-          <Card>
-            <CardHead
-              title="Project health"
-              sub="Progress · budget used"
-              right={
-                <Link
-                  href="/projects"
-                  className="text-xs text-indigo-500 hover:text-indigo-700 font-medium"
-                >
-                  View all →
-                </Link>
-              }
-            />
-            <div className="divide-y divide-gray-100">
-              {d.projects.map((p) => {
-                const risk = p.budgetUsed >= 80;
-                return (
+          {/* Review queue */}
+          {showReviewQueueCard && (
+            <Card>
+              <CardHead
+                title="Review queue"
+                sub="Waiting for your approval"
+                right={
+                  showReviewQueueLink ? (
+                    <Link
+                      href="/review-queue"
+                      className="text-xs text-indigo-500 hover:text-indigo-700 font-medium"
+                    >
+                      Open queue →
+                    </Link>
+                  ) : undefined
+                }
+              />
+              <div className="divide-y divide-gray-100">
+                {data.review.length === 0 && (
+                  <p className="py-6 text-xs text-gray-400 text-center">
+                    Nothing waiting for review
+                  </p>
+                )}
+                {data.review.map((r) => (
                   <div
-                    key={p.id}
+                    key={r.id}
                     className="py-3 first:pt-0 last:pb-0 flex items-center gap-3"
                   >
+                    <Avatar name={r.by} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-800 truncate">
-                        {p.name}
+                        {r.title}
                       </p>
-                      <p className="text-xs text-gray-400">{p.client}</p>
-                      <ProgressBar
-                        value={p.progress}
-                        color={risk ? "#f59e0b" : "#4f46e5"}
-                        className="mt-2"
-                      />
+                      <p className="text-xs text-gray-400 truncate">
+                        {r.project} · {r.when}
+                      </p>
                     </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-bold text-gray-900">
-                        {p.progress}%
+                    <PriorityPill p={r.priority} />
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* Recent activity — admin + user only, capped at 5 */}
+          {showRecentActivity && (
+            <Card>
+              <CardHead title="Recent activity" sub="Latest 5 events" />
+              <div className="divide-y divide-gray-100">
+                {data.recent.slice(0, 5).length === 0 && (
+                  <p className="py-6 text-xs text-gray-400 text-center">
+                    No recent activity
+                  </p>
+                )}
+                {data.recent.slice(0, 5).map((a) => (
+                  <div
+                    key={a.id}
+                    className="py-3 first:pt-0 last:pb-0 flex items-start gap-3"
+                  >
+                    <Avatar name={a.user} />
+                    <div className="min-w-0">
+                      <p className="text-sm text-gray-700">
+                        <span className="font-semibold text-gray-900">
+                          {a.user}
+                        </span>{" "}
+                        {a.action}{" "}
+                        <span className="font-semibold text-gray-900">
+                          {a.target}
+                        </span>
                       </p>
-                      <p
-                        className={`text-xs ${risk ? "text-red-500 font-semibold" : "text-gray-400"}`}
-                      >
-                        {p.budgetUsed}% budget
-                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">{a.when}</p>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          </Card>
+                ))}
+              </div>
+            </Card>
+          )}
         </div>
+
+        {/* Deadline load + Project health */}
+        {(showDeadlineLoad || showProjectHealth) && (
+          <div
+            className={`grid grid-cols-1 gap-4 ${
+              showDeadlineLoad && showProjectHealth
+                ? "lg:grid-cols-2"
+                : "lg:grid-cols-1"
+            }`}
+          >
+            {showDeadlineLoad && (
+              <Card>
+                <CardHead
+                  title="Deadline load"
+                  sub={`Tasks due by date · ${range}`}
+                  right={
+                    <Legend
+                      items={[{ label: "Tasks due", color: "#0d9488" }]}
+                    />
+                  }
+                />
+                <DueLoadChart data={cur.dueLoad} />
+              </Card>
+            )}
+
+            {showProjectHealth && (
+              <Card>
+                <CardHead
+                  title="Project health"
+                  sub="Progress · budget used"
+                  right={
+                    isAdmin ? (
+                      <Link
+                        href="/projects"
+                        className="text-xs text-indigo-500 hover:text-indigo-700 font-medium"
+                      >
+                        View all →
+                      </Link>
+                    ) : undefined
+                  }
+                />
+                <div className="divide-y divide-gray-100">
+                  {data.projects.length === 0 && (
+                    <p className="py-6 text-xs text-gray-400 text-center">
+                      No projects to show
+                    </p>
+                  )}
+                  {data.projects.map((p) => {
+                    const risk = p.budgetUsed >= 80;
+                    return (
+                      <div
+                        key={p.id}
+                        className="py-3 first:pt-0 last:pb-0 flex items-center gap-3"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-800 truncate">
+                            {p.name}
+                          </p>
+                          <p className="text-xs text-gray-400">{p.client}</p>
+                          <ProgressBar
+                            value={p.progress}
+                            color={risk ? "#f59e0b" : "#4f46e5"}
+                            className="mt-2"
+                          />
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-sm font-bold text-gray-900">
+                            {p.progress}%
+                          </p>
+                          <p
+                            className={`text-xs ${
+                              risk
+                                ? "text-red-500 font-semibold"
+                                : "text-gray-400"
+                            }`}
+                          >
+                            {p.budgetUsed}% budget
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            )}
+          </div>
+        )}
       </div>
     </TooltipProvider>
   );
