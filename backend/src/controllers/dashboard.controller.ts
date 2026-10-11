@@ -1,11 +1,21 @@
+// src/controllers/dashboard.controller.ts
 import type { Context } from "hono";
 import { dashboardService } from "../services/dashboard.service";
 
 export const dashboardController = {
-  async get(c: Context) {
-    const tenantId = c.get("tenantId") as string;
-    const user = c.get("user") as { role: string };
-    const data = await dashboardService.get(tenantId, user.role);
+  /**
+   * GET /dashboard
+   * Role-aware dashboard payload. Range filtering happens client-side
+   * via `byRange`, so no query param is needed here.
+   */
+  async getDashboard(c: Context) {
+    const currentUser = c.get("user");
+
+    const data = await dashboardService.getDashboard(currentUser.tenantId, {
+      id: currentUser.id,
+      role: currentUser.role,
+    });
+
     return c.json(data);
   },
 };
