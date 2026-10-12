@@ -18,7 +18,6 @@ function formatMoney(amount?: string | null, currency?: string | null) {
   return `${currency ?? "USD"} ${n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
-// overall + per-milestone task stats
 function getTaskStats(tasks: { isCompleted: boolean }[]) {
   const total = tasks.length;
   const completed = tasks.filter((t) => t.isCompleted).length;
@@ -26,7 +25,6 @@ function getTaskStats(tasks: { isCompleted: boolean }[]) {
   return { total, completed, percent };
 }
 
-// overall task progress based on latest progress entry
 function getTaskProgressPercent(task: {
   isCompleted: boolean;
   progress?: Array<{ progressPercentage: number; createdAt: string }>;
@@ -94,7 +92,6 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
   );
   const completedCount = sortedMilestones.filter((m) => m.isCompleted).length;
 
-  // overall task progress across all milestones
   const allTasks = sortedMilestones.flatMap((m) => m.tasks ?? []);
   const overallStats = getTaskStats(allTasks);
 
@@ -263,7 +260,6 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
                       key={m.id ?? m.name}
                       className="border border-gray-200 rounded-lg overflow-hidden"
                     >
-                      {/* Milestone header (clickable) */}
                       <button
                         type="button"
                         onClick={() => toggleMilestone(m.id ?? m.name)}
@@ -315,7 +311,6 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
                             </p>
                           )}
 
-                          {/* per-milestone task progress bar */}
                           {mStats.total > 0 && (
                             <div className="mt-2 flex items-center gap-2">
                               <div className="flex-1">
@@ -332,7 +327,6 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
                         </div>
                       </button>
 
-                      {/* Milestone accordion content — tasks */}
                       {isOpen && (
                         <div className="border-t border-gray-100 bg-gray-50/50 px-3 py-3">
                           {milestoneTasks.length === 0 ? (
@@ -399,7 +393,6 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
                                           </p>
                                         )}
 
-                                        {/* meta row */}
                                         <div className="flex items-center gap-3 mt-1 text-xs text-gray-400 flex-wrap">
                                           {task.dueDate && (
                                             <span>
@@ -416,7 +409,6 @@ export function ProjectDetailModal({ project, onClose, onEdit }: Props) {
                                           )}
                                         </div>
 
-                                        {/* task overall progress bar */}
                                         <div className="mt-1.5 flex items-center gap-2">
                                           <div className="flex-1">
                                             <ProgressBar
